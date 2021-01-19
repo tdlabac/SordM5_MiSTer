@@ -1,4 +1,8 @@
 //============================================================================
+//  Computer: Sord M5
+//
+//  Copyright (C) 2018 Sorgelig
+//  Copyright (C) 2021 molekula
 //
 //  This program is free software; you can redistribute it and/or modify it
 //  under the terms of the GNU General Public License as published by the Free
@@ -175,14 +179,12 @@ assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;  
 
-assign VGA_SL = 0;
 assign VGA_F1 = 0;
 assign VGA_SCALER = 0;
 
-assign AUDIO_S = 0;
-assign AUDIO_L = 0;
-assign AUDIO_R = 0;
 assign AUDIO_MIX = 0;
+assign AUDIO_S = 0;
+assign LED_USER = 0;
 
 assign LED_DISK = 0;
 assign LED_POWER = 0;
@@ -200,23 +202,6 @@ localparam CONF_STR = {
 	"Sord M5;;",
 	"-;",
 	"O89,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
-	"O2,TV Mode,NTSC,PAL;",
-	"O34,Noise,White,Red,Green,Blue;",
-	"-;",
-	"P1,Test Page 1;",
-	"P1-;",
-	"P1-, -= Options in page 1 =-;",
-	"P1-;",
-	"P1O5,Option 1-1,Off,On;",
-	"d0P1F1,BIN;",
-	"H0P1O6,Option 1-2,Off,On;",
-	"-;",
-	"P2,Test Page 2;",
-	"P2-;",
-	"P2-, -= Options in page 2 =-;",
-	"P2-;",
-	"P2S0,DSK;",
-	"P2O67,Option 2,1,2,3,4;",
 	"-;",
 	"-;",
 	"T0,Reset;",
@@ -224,10 +209,19 @@ localparam CONF_STR = {
 	"V,v",`BUILD_DATE 
 };
 
-wire forced_scandoubler;
+//wire forced_scandoubler;
 wire  [1:0] buttons;
 wire [31:0] status;
 wire [10:0] ps2_key;
+
+wire        ioctl_download;
+wire  [7:0] ioctl_index;
+wire        ioctl_wr;
+wire [24:0] ioctl_addr;
+wire  [7:0] ioctl_dout;
+wire 			ioctl_wait;
+wire        forced_scandoubler;
+wire [21:0] gamma_bus;
 
 hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 (
@@ -242,8 +236,15 @@ hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 	.buttons(buttons),
 	.status(status),
 	.status_menumask({status[5]}),
+
+	.ps2_key(ps2_key), 
 	
-	.ps2_key(ps2_key)
+	.ioctl_wr(ioctl_wr),
+	.ioctl_addr(ioctl_addr),
+	.ioctl_dout(ioctl_dout),
+	.ioctl_download(ioctl_download),
+	.ioctl_index(ioctl_index),
+	.ioctl_wait(ioctl_wait)
 );
 
 ///////////////////////   CLOCKS   ///////////////////////////////
@@ -256,49 +257,86 @@ pll pll
 	.outclk_0(clk_sys)
 );
 
-wire reset = RESET | status[0] | buttons[1];
-
-//////////////////////////////////////////////////////////////////
-
-wire [1:0] col = status[4:3];
-
-wire HBlank;
-wire HSync;
-wire VBlank;
-wire VSync;
-wire ce_pix;
-wire [7:0] video;
-
-sordM5 sordM5
-(
-	.clk(clk_sys),
-	.reset(reset),
+reg ce_10m7 = 0;
+reg ce_5m3 = 0;
+always @(posedge clk_sys) begin
+	reg [2:0] div;
 	
-	.pal(status[2]),
-	.scandouble(forced_scandoubler),
+	div <= div+1'd1;
+	ce_10m7 <= !div[1:0];
+	ce_5m3  <= !div[2:0];
+end
 
-	.ce_pix(ce_pix),
+/////////////////  RESET  /////////////////////////
 
-	.HBlank(HBlank),
-	.HSync(HSync),
-	.VBlank(VBlank),
-	.VSync(VSync),
+wire reset = RESET | status[0] | buttons[1] | ioctl_download;
 
-	.video(video)
-);
+
+////////////////  Console  ////////////////////////
+
+wire [10:0] audio;
+assign AUDIO_L = {audio,5'd0};
+assign AUDIO_R = {audio,5'd0};
+
+wire [7:0] R,G,B;
+wire hblank, vblank;
+wire hsync, vsync;
 
 assign CLK_VIDEO = clk_sys;
-assign CE_PIXEL = ce_pix;
 
-assign VGA_DE = ~(HBlank | VBlank);
-assign VGA_HS = HSync;
-assign VGA_VS = VSync;
-assign VGA_G  = (!col || col == 2) ? video : 8'd0;
-assign VGA_R  = (!col || col == 1) ? video : 8'd0;
-assign VGA_B  = (!col || col == 3) ? video : 8'd0;
 
-reg  [26:0] act_cnt;
-always @(posedge clk_sys) act_cnt <= act_cnt + 1'd1; 
-assign LED_USER    = act_cnt[26]  ? act_cnt[25:18]  > act_cnt[7:0]  : act_cnt[25:18]  <= act_cnt[7:0];
+sordM5 SordM5
+(
+	.clk_i(clk_sys),
+	.clk_en_10m7_i(ce_10m7),
+	.reset_n_i(~reset),
+	.por_n_o(),
+	.border_i(status[6]),
+	.rgb_r_o(R),
+	.rgb_g_o(G),
+	.rgb_b_o(B),
+	.hsync_n_o(hsync),
+	.vsync_n_o(vsync),
+	.hblank_o(hblank),
+	.vblank_o(vblank),
+	.audio_o(audio), 
+  .ps2_key_i(ps2_key)
+);
+
+assign VGA_SL = sl[1:0];
+
+wire [2:0] scale = status[9:7];
+wire [2:0] sl = scale ? scale - 1'd1 : 3'd0;
+
+reg hs_o, vs_o;
+always @(posedge CLK_VIDEO) begin
+	hs_o <= ~hsync;
+	if(~hs_o & ~hsync) vs_o <= ~vsync;
+end
+
+video_mixer #(.LINE_LENGTH(290), .GAMMA(1)) video_mixer
+(
+	.*,
+
+	.clk_vid(CLK_VIDEO),
+	.ce_pix(ce_5m3),
+	.ce_pix_out(CE_PIXEL),
+
+	.scanlines(0),
+	.scandoubler(scale || forced_scandoubler),
+	.hq2x(scale==1),
+
+	.mono(0),
+
+	.R(R),
+	.G(G),
+	.B(B),
+
+	// Positive pulses.
+	.HSync(hs_o),
+	.VSync(vs_o),
+	.HBlank(hblank),
+	.VBlank(vblank)
+);
 
 endmodule
