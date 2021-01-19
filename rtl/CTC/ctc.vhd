@@ -1,4 +1,6 @@
 -- Copyright (c) 2015, $ME
+-- Copyright (c) 2021, molekula
+--
 -- All rights reserved.
 --
 -- Redistribution and use in source and synthezised forms, with or without modification, are permitted 
@@ -27,15 +29,12 @@ use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all; 
 
 entity ctc is
-    generic (
-        sysclk : integer := 500000; -- 50MHz
-        ctcclk : integer :=  24576  --  2.4576MHz
-    );
     port (
         clk   : in std_logic;
+        clk_sys_i  : in std_logic;
         res_n : in std_logic; -- negative
         en    : in std_logic; -- negative
-        
+		  
         dIn   : in std_logic_vector(7 downto 0);
         dOut  : out std_logic_vector(7 downto 0);
         
@@ -43,42 +42,37 @@ entity ctc is
         m1_n  : in std_logic; -- negative
         iorq_n : in std_logic; -- negative
         rd_n  : in std_logic; -- negative
-        
-        int   : out std_logic_vector(3 downto 0);
-        intAck : in std_logic_vector(3 downto 0);
-        
+        int_n : out std_logic := '1';
+               
         clk_trg : in std_logic_vector(3 downto 0);
         zc_to   : out std_logic_vector(3 downto 0);
-        kcSysClk : out std_logic
+        RETI_n	: in std_logic
     );
 end ctc;
 
 architecture rtl of ctc is
-    type byteArray is array (natural range <>) of std_logic_vector(7 downto 0);
-    
-    signal clkCounter : integer range 0 to sysclk+ctcclk-1 := 0;
-    signal ctcClkEn   : std_logic := '0';
-    
+    type byteArray is array (natural range <>) of std_logic_vector(7 downto 0);   
     signal cEn        : std_logic_vector(3 downto 0);
     signal cDOut      : byteArray(3 downto 0);
     signal cSetTC     : std_logic_vector(3 downto 0);
     signal setTC      : std_logic;
     
     signal irqVect    : std_logic_vector(7 downto 3) := (others => '0');
+	 signal intAckChannel : std_logic_vector(1 downto 0):= (others => '0');
     
-    signal intAckChannel : std_logic_vector(1 downto 0);
+    type states is (idle, waitIntAccepted, waitReti,waitForM1 );
+	 signal state         : states := idle;
+	 signal cpuACKint     : std_logic;
+	 signal internalInt   : std_logic_vector(3 downto 0) := (others => '0');
+	 signal lastInt       : std_logic_vector(3 downto 0) := (others => '0');
+    signal int           : std_logic_vector(3 downto 0) := (others => '0');
+	 signal count         : std_logic_vector(1 downto 0);
 
 begin
-    kcSysClk <= ctcClkEn;
-    
-    intAckChannel <= 
-        "00" when intAck(0)='1' else
-        "01" when intAck(1)='1' else
-        "10" when intAck(2)='1' else
-        "11";
-    
+    cpuACKint <= '1' when iorq_n='0' and m1_n='0' else '0';
+        
     dOut <= 
-        irqVect & intAckChannel & "0" when intAck/="0000" else -- int acknowledge
+        irqVect & intAckChannel & "0" when cpuACKint='1' else -- int acknowledge
         cDOut(0) when cEn(0)='1' else
         cDOut(1) when cEn(1)='1' else
         cDOut(2) when cEn(2)='1' else
@@ -89,20 +83,70 @@ begin
         cSetTC(1) when cs="01" else
         cSetTC(2) when cs="10" else
         cSetTC(3);
-      
-    -- generate clock for ctc timer
-    clkGen : process 
-    begin
-        wait until rising_edge(clk);
+	 
+    genInt : process 
+    variable counterInt : integer;
 
-        if (clkCounter>=sysclk-ctcclk) then
-            clkCounter <= clkCounter - sysclk + ctcclk;
-            ctcClkEn <= '1';
-        else
-            clkCounter <= clkCounter + ctcclk;
-            ctcClkEn <= '0';
+    begin
+      wait until rising_edge(clk);
+
+      int_n <='1';
+
+      if res_n = '0' then
+        state <= idle;
+        int_n <='1';
+        lastInt <= "0000";
+        internalInt <= "0000";
+      else
+        case state is
+        when idle =>
+         if internalInt /="0000" then -- int request
+          state <= waitIntAccepted;
+          int_n <='0';
         end if;
-    end process;
+        when waitIntAccepted =>
+          if cpuACKint = '1' then -- incoming ack
+            int_n <='1';
+            for i in 0 to 3 -- 0 is highest prio
+            loop
+              if internalInt(i)='1' then
+                internalInt(i) <= '0' ; --reset int
+                counterInt := i;
+                exit;
+              end if;
+            end loop;
+            state <= waitReti;
+          else 
+            int_n <='0';
+          end if;
+        when waitReti =>
+          if RETI_n = '0' then 
+            state <= waitForM1;
+            count <= "11";
+          end if;
+        when others =>
+          if m1_n = '0' and count(0) = '1' then -- first ignore
+            count(0) <= '0';
+          end if;
+          if m1_n = '1' and count(0) = '0' then
+            count(1) <= '0';
+          end if;
+          if m1_n = '0' and count(1) = '0' then
+            state <= idle;
+          end if;
+        end case;
+
+        for i in 0 to 3
+        loop
+          if lastInt(i) = '0' and int(i) = '1' then	-- new interupt
+            internalInt(i) <= '1';
+          end if;
+        end loop;
+        
+        lastInt <= int;
+      end if;
+      intAckChannel	<= std_logic_vector(to_unsigned(counterInt, 2));
+    end process;    
     
     cpuInt : process
     begin
@@ -118,16 +162,13 @@ begin
         port map (
             clk     => clk,
             res_n   => res_n,
-            en      => cEn(i),
-            
+            en      => cEn(i),            
             dIn     => dIn,
-            dOut    => cDOut(i),
-            
-            rd_n    => rd_n,
-            
+            dOut    => cDOut(i),            
+            rd_n    => rd_n,            
             int     => int(i),
             setTC   => cSetTC(i),
-            ctcClkEn => ctcClkEn,
+            ctcClkEn => clk_sys_i,
             clk_trg  => clk_trg(i),
             zc_to    => zc_to(i)
         );
