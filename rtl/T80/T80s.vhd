@@ -96,7 +96,8 @@ entity T80s is
 		OUT0    : in  std_logic := '0';  -- 0 => OUT(C),0, 1 => OUT(C),255
 		A       : out std_logic_vector(15 downto 0);
 		DI      : in std_logic_vector(7 downto 0);
-		DO      : out std_logic_vector(7 downto 0)
+		DO      : out std_logic_vector(7 downto 0);
+		RETI_n  : out std_logic
 	);
 end T80s;
 
