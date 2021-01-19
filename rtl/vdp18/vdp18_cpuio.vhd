@@ -139,6 +139,7 @@ architecture rtl of vdp18_cpuio is
   signal sprite_5th_num_q  : std_logic_vector(0 to 4);
   signal sprite_coll_q     : boolean;
   signal int_n_q           : std_logic;
+  signal int_out_n_q       : std_logic;
   
 
   type   read_mux_t is (RDMUX_STATUS, RDMUX_READAHEAD);
@@ -282,6 +283,7 @@ begin
       sprite_5th_q     <= false;
       sprite_5th_num_q <= (others => '0');
       int_n_q          <= '1';
+      int_out_n_q      <= '1';
 
     elsif clk_i'event and clk_i = '1' then
       if clk_en_10m7_i then
@@ -316,8 +318,12 @@ begin
       -- Interrupt ------------------------------------------------------------
       if    irq_i then
         int_n_q <= '0';
-      elsif destr_rd_status_s then
-        int_n_q <= '1';
+        int_out_n_q <= '0';
+      else 
+        int_out_n_q <= '1';
+        if destr_rd_status_s then
+          int_n_q <= '1';
+        end if;
       end if;
     end if;
   end process reg_if;
@@ -565,6 +571,6 @@ begin
   reg_spgb_o  <= ctrl_reg_q(6)(5 to 7);
   reg_col1_o  <= ctrl_reg_q(7)(0 to 3);
   reg_col0_o  <= ctrl_reg_q(7)(4 to 7);
-  int_n_o     <= int_n_q or not ctrl_reg_q(1)(2);
+  int_n_o     <= int_out_n_q or not ctrl_reg_q(1)(2);
 
 end rtl;
