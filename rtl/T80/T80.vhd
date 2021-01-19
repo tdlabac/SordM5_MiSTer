@@ -122,7 +122,8 @@ entity T80 is
 		REG        : out std_logic_vector(211 downto 0); -- IFF2, IFF1, IM, IY, HL', DE', BC', IX, HL, DE, BC, PC, SP, R, I, F', A', F, A
 
 		DIRSet     : in  std_logic := '0';
-		DIR        : in  std_logic_vector(211 downto 0) := (others => '0') -- IFF2, IFF1, IM, IY, HL', DE', BC', IX, HL, DE, BC, PC, SP, R, I, F', A', F, A
+		DIR        : in  std_logic_vector(211 downto 0) := (others => '0'); -- IFF2, IFF1, IM, IY, HL', DE', BC', IX, HL, DE, BC, PC, SP, R, I, F', A', F, A
+		RETI_n     : out std_logic
 	);
 end T80;
 
@@ -399,9 +400,11 @@ begin
 			PreserveC_r <= '0';
 			XY_Ind <= '0';
 			I_RXDD <= '0';
+			RETI_n <= '1';
 
 		elsif rising_edge(CLK_n) then
-
+			RETI_n <= not I_RETN;
+      
 			if DIRSet = '1' then
 				ACC <= DIR( 7 downto  0);
 				F   <= DIR(15 downto  8);

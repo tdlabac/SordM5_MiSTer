@@ -85,7 +85,8 @@ entity T80pa is
         DO          : out std_logic_vector(7 downto 0);
         REG         : out std_logic_vector(211 downto 0); -- IFF2, IFF1, IM, IY, HL', DE', BC', IX, HL, DE, BC, PC, SP, R, I, F', A', F, A
         DIRSet      : in  std_logic := '0';
-        DIR         : in  std_logic_vector(211 downto 0) := (others => '0') -- IFF2, IFF1, IM, IY, HL', DE', BC', IX, HL, DE, BC, PC, SP, R, I, F', A', F, A
+        DIR         : in  std_logic_vector(211 downto 0) := (others => '0'); -- IFF2, IFF1, IM, IY, HL', DE', BC', IX, HL, DE, BC, PC, SP, R, I, F', A', F, A
+        RETI_n      : out std_logic
     );
 end T80pa;
 
@@ -137,7 +138,8 @@ begin
             OUT0    => OUT0,
             IntCycle_n => IntCycle_n,
             DIRSet  => DIRSet,
-            DIR     => DIR
+            DIR     => DIR,
+            RETI_n => RETI_n
         );
 
     process(CLK)
