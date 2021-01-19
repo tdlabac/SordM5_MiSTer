@@ -173,7 +173,7 @@ begin
                 else
                     CEN_pol <= '0';
                 end if;
-                if TState = "011" and BUSAK = '1' then
+                if ((TState = "011" and IntCycle_n = '1') or (TState = "010" and IntCycle_n = '0'))  and BUSAK = '1' then
                     DI_Reg <= DI;
                 end if;
                 if MCycle = "001" then
