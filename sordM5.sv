@@ -201,6 +201,7 @@ assign VIDEO_ARY = (!ar) ? 12'd3 : 12'd0;
 localparam CONF_STR = {
 	"Sord M5;;",
 	"-;",
+  "F1,binROM,Load to ROM;",
 	"O89,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"-;",
 	"-;",
@@ -269,7 +270,7 @@ end
 
 /////////////////  RESET  /////////////////////////
 
-wire reset = RESET | status[0] | buttons[1] | ioctl_download;
+wire reset = RESET | status[0] | buttons[1] | (ioctl_index == 8'd1 & ioctl_download);
 
 
 ////////////////  Console  ////////////////////////
@@ -300,7 +301,12 @@ sordM5 SordM5
 	.hblank_o(hblank),
 	.vblank_o(vblank),
 	.audio_o(audio), 
-  .ps2_key_i(ps2_key)
+  .ps2_key_i(ps2_key),
+  .ioctl_addr (ioctl_addr),
+  .ioctl_dout (ioctl_dout),
+  .ioctl_index (ioctl_index),
+  .ioctl_wr (ioctl_wr),  
+  .ioctl_download (ioctl_download)
 );
 
 assign VGA_SL = sl[1:0];

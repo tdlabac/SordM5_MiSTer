@@ -36,9 +36,11 @@ entity addr_dec is
     mreq_n_i        : in  std_logic;
     rfsh_n_i        : in  std_logic;
     bios_ce_n_o     : out std_logic;
-    rom_ce_n_o      : out std_logic;
-    ram1_ce_n_o     : out std_logic;
-	 ram2_ce_n_o     : out std_logic;
+    ram_ce_n_o      : out std_logic;
+    ram_we_n_o      : out std_logic;
+--    rom_ce_n_o      : out std_logic;
+--    ram1_ce_n_o     : out std_logic;
+--	  ram2_ce_n_o     : out std_logic;
     vdp_r_n_o       : out std_logic;
     vdp_w_n_o       : out std_logic;
     psg_we_n_o      : out std_logic;
@@ -52,17 +54,16 @@ end addr_dec;
 
 
 architecture rtl of addr_dec is
-     signal io_s : boolean;
+     signal io_s  : boolean;
      signal mem_s : boolean;
 begin
   io_s  <= iorq_n_i = '0' and m1_n_i = '1';
   mem_s <= mreq_n_i = '0' and rfsh_n_i = '1';
   
   -- MEM
-  bios_ce_n_o     <= '0' when mem_s AND a_i(15 downto 13) = "000"   else '1';   -- 0000 - 1FFF
-  rom_ce_n_o      <= '0' when mem_s AND a_i(15 downto 13) = "001"   else '1';   -- 2000 - 3FFF
-  ram1_ce_n_o     <= '0' when mem_s AND a_i(15 downto 13) = "011"   else '1';   -- 6000 - 7FFF
-  ram2_ce_n_o     <= '0' when mem_s AND a_i(15) = '1'               else '1';   -- 8000 - FFFF
+  bios_ce_n_o     <= '0' when mem_s AND a_i(15 downto 13) = "000"   else '1';                                     -- 0000 - 1FFF
+  ram_ce_n_o      <= '0' when mem_s AND a_i(15 downto 13) /= "000" else '1';                                      -- 2000 - FFFF
+  ram_we_n_o      <= '0' when mem_s AND wr_n_i = '0' AND (a_i(15) = '1' OR a_i(15 downto 13) = "011") else '1';   -- 5000 - FFFF
 
   -- IO
   vdp_r_n_o       <= '0' when io_s and a_i(7 downto 4) = "0001"     AND rd_n_i = '0' else '1' ;    -- VDP rd
