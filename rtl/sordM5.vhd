@@ -52,7 +52,13 @@ entity sordM5 is
     vblank_o        : out std_logic;
     comp_sync_n_o   : out std_logic;
     -- Audio Interface --------------------------------------------------------
-    audio_o         : out std_logic_vector(10 downto 0)
+    audio_o         : out std_logic_vector(10 downto 0);
+    -- hps_io --------------------------------------------------------
+    ioctl_addr      : in std_logic_vector( 24 downto 0);
+    ioctl_dout      : in std_logic_vector( 7 downto 0);
+    ioctl_index     : in std_logic_vector( 7 downto 0);
+    ioctl_wr        : in std_logic;
+    ioctl_download  : in std_logic    
   );
 
 end sordM5;
@@ -102,16 +108,15 @@ architecture struct of sordM5 is
   signal cas_ce_n_s       : std_logic;
   
   -- CTC interface
-  signal d_from_ctc_s     : std_logic_vector( 7 downto 0);
+  signal d_from_ctc_s     : std_logic_vector(7 downto 0);
   signal int_ctc_s        : std_logic_vector(3 downto 0);
   signal int_ctc_ack_s    : std_logic_vector(3 downto 0);
   
   -- Address decoder signals
   signal bios_ce_n_s      : std_logic;
-  signal rom_ce_n_s       : std_logic;
-  signal ram1_ce_n_s      : std_logic;
-  signal ram2_ce_n_s      : std_logic;
-  signal vdp_r_n_s		  : std_logic;
+  signal ram_ce_n_s       : std_logic;
+  signal ram_we_n_s       : std_logic;
+  signal vdp_r_n_s		    : std_logic;
   signal vdp_w_n_s        : std_logic;
   signal psg_we_n_s       : std_logic;
   signal ctc_ce_n_s       : std_logic;
@@ -129,12 +134,14 @@ architecture struct of sordM5 is
   signal vram_di_s        : std_logic_vector( 7 downto 0);
   
   -- ram
-  signal ram1_di_s        : std_logic_vector( 7 downto 0);
-  signal ram2_di_s        : std_logic_vector( 7 downto 0);
+  signal ioctl_addr_off   : std_logic_vector(15 downto 0);
+  signal ram_di_s         : std_logic_vector( 7 downto 0);
   
   -- rom 
-  signal rom_di_s         : std_logic_vector( 7 downto 0);
   signal bios_di_s        : std_logic_vector( 7 downto 0);
+  
+  signal rom_ioctl_we_s   : std_logic;
+  
 
 begin
 
@@ -298,9 +305,8 @@ begin
       rfsh_n_i        => rfsh_n_s,
       m1_n_i          => m1_n_s,
       bios_ce_n_o     => bios_ce_n_s,
-      rom_ce_n_o      => rom_ce_n_s,
-      ram1_ce_n_o     => ram1_ce_n_s,
-		ram2_ce_n_o     => ram2_ce_n_s,
+      ram_ce_n_o      => ram_ce_n_s,
+      ram_we_n_o      => ram_we_n_s,
       vdp_r_n_o       => vdp_r_n_s,
       vdp_w_n_o       => vdp_w_n_s,
       psg_we_n_o      => psg_we_n_s,
@@ -316,15 +322,11 @@ begin
 
   bus_mux : work.bus_mux
     port map (
-      bios_ce_n_i      => bios_ce_n_s,
-      rom_ce_n_i       => rom_ce_n_s,
-      ram1_ce_n_i      => ram1_ce_n_s,
-		ram2_ce_n_i      => ram2_ce_n_s,
+      bios_ce_n_i     => bios_ce_n_s,
+      ram_ce_n_i      => ram_ce_n_s,
       vdp_r_n_i       => vdp_r_n_s,
-      bios_d_i         => bios_di_s,
-      rom_d_i          => rom_di_s,
-      cpu_ram1_d_i     => ram1_di_s,
-		cpu_ram2_d_i     => ram2_di_s,
+      bios_d_i        => bios_di_s,
+      ram_d_i         => ram_di_s,
       vdp_d_i         => d_from_vdp_s,
       d_o             => d_to_cpu_s, 
       kb_d_i          => kb_do_s,
@@ -353,32 +355,25 @@ begin
 		q => vram_di_s
 	 );
 	 
-  ram1 : work.spram
+  
+  rom_ioctl_we_s <= '1' when ioctl_index = "00000001" AND ioctl_wr = '1' AND ioctl_download = '1' else '0';
+  ioctl_addr_off <= ioctl_addr(15 downto 0) + 8192; 
+  
+  ram : work.dpram
     generic map (
-      addr_width => 13,
-		mem_name => "INTram"
+      addr_width => 16
     )
     port map (
 		clock => clk_i,
-		address => a_s(12 downto 0),
-		wren => clk_en_10m7_i AND NOT(wr_n_s OR ram1_ce_n_s),
-		data => d_from_cpu_s,
-		q => ram1_di_s
+		address_a => a_s(15 downto 0),
+		wren_a => clk_en_10m7_i AND NOT(ram_we_n_s),
+		data_a => d_from_cpu_s,
+		q_a => ram_di_s,
+    address_b(15 downto 0) => ioctl_addr_off,
+    data_b => ioctl_dout,
+    wren_b => rom_ioctl_we_s
 	 );
-	 
-  ram2 : work.spram
-    generic map (
-      addr_width => 15,
-      mem_name => "EXTram"
-    )
-    port map (
-      clock => clk_i,
-      address => a_s(14 downto 0),
-      wren => clk_en_10m7_i AND NOT(wr_n_s OR ram2_ce_n_s),
-      data => d_from_cpu_s,
-      q => ram2_di_s
-	 );
-	 
+
   bios : work.spram
     generic map (
       addr_width => 13,
@@ -389,20 +384,7 @@ begin
       clock => clk_i,
       address => a_s(12 downto 0),
       q => bios_di_s
-	 );
-   
-  rom : work.spram
-    generic map (
-      addr_width => 13,
-      mem_init_file => "rtl/POOYAN.mif",
-      mem_name => "ROM"
-    )
-    port map (
-      clock => clk_i,
-      address => a_s(12 downto 0),
-      q => rom_di_s
-	 );
-
+     );
  -----------------------------------------------------------------------------
  -- Interupt CTC
  -----------------------------------------------------------------------------
