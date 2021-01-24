@@ -177,8 +177,7 @@ assign USER_OUT = '1;
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
-assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;  
-
+ 
 assign VGA_F1 = 0;
 assign VGA_SCALER = 0;
 
@@ -306,7 +305,17 @@ sordM5 SordM5
   .ioctl_dout (ioctl_dout),
   .ioctl_index (ioctl_index),
   .ioctl_wr (ioctl_wr),  
-  .ioctl_download (ioctl_download)
+  .ioctl_download (ioctl_download),
+  .DDRAM_BUSY ( DDRAM_BUSY),
+  .DDRAM_BURSTCNT ( DDRAM_BURSTCNT),
+  .DDRAM_ADDR ( DDRAM_ADDR),
+  .DDRAM_DOUT ( DDRAM_DOUT),
+  .DDRAM_DOUT_READY ( DDRAM_DOUT_READY),
+  .DDRAM_RD ( DDRAM_RD),
+  .DDRAM_DIN ( DDRAM_DIN),
+  .DDRAM_BE ( DDRAM_BE),
+  .DDRAM_WE ( DDRAM_WE),
+  .DDRAM_CLK ( DDRAM_CLK)
 );
 
 assign VGA_SL = sl[1:0];
