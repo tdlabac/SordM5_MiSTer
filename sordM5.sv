@@ -201,7 +201,9 @@ localparam CONF_STR = {
 	"Sord M5;;",
 	"-;",
   "F1,binROM,Load to ROM;",
-	"O89,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
+  "F2,CAS,Load Tape;",
+  "O5,Speed up CAS,No,Yes;",
+  "O89,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"-;",
 	"-;",
 	"T0,Reset;",
@@ -315,7 +317,8 @@ sordM5 SordM5
   .DDRAM_DIN ( DDRAM_DIN),
   .DDRAM_BE ( DDRAM_BE),
   .DDRAM_WE ( DDRAM_WE),
-  .DDRAM_CLK ( DDRAM_CLK)
+  .DDRAM_CLK ( DDRAM_CLK),
+  .casSpeed (status[5])
 );
 
 assign VGA_SL = sl[1:0];

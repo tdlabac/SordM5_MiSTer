@@ -59,6 +59,7 @@ entity sordM5 is
     ioctl_index     : in std_logic_vector( 7 downto 0);
     ioctl_wr        : in std_logic;
     ioctl_download  : in std_logic;
+    casSpeed        : in std_logic;
     -- DDRAM --------------------------------------------------------
     DDRAM_CLK       : out std_logic;
     DDRAM_BUSY      : in std_logic;
@@ -117,6 +118,8 @@ architecture struct of sordM5 is
   
   -- Cassete interface
   signal cas_ce_n_s       : std_logic;
+  signal casOut_s         : std_logic;
+  signal casOn_s          : std_logic;
   
   -- CTC interface
   signal d_from_ctc_s     : std_logic_vector(7 downto 0);
@@ -152,6 +155,14 @@ architecture struct of sordM5 is
   signal bios_di_s        : std_logic_vector( 7 downto 0);
   
   signal rom_ioctl_we_s   : std_logic;
+  
+  -- ddram buffer
+  signal buff_mem_addr    : std_logic_vector(27 downto 0);
+  signal buff_mem_dout    : std_logic_vector(7 downto 0);
+  signal buff_mem_din     : std_logic_vector(7 downto 0);
+  signal buff_mem_wr      : std_logic;
+  signal buff_mem_rd      : std_logic;
+  signal buff_mem_ready   : std_logic;
   
   component ddram is
     port (
@@ -345,7 +356,8 @@ begin
       kb_ce_n_o       => kb_ce_n_s,
       cas_ce_n_o      => cas_ce_n_s, 
       ctc_ce_n_o      => ctc_ce_n_s,
-      int_vect_ce_n_o => int_vect_ce_n_s
+      int_vect_ce_n_o => int_vect_ce_n_s,
+      casOn_o         => casOn_s
     );
 
   -----------------------------------------------------------------------------
@@ -367,7 +379,8 @@ begin
       cas_ce_n_i      => cas_ce_n_s,
       ctc_ce_n_i      => ctc_ce_n_s,
       ctc_d_i         => d_from_ctc_s,
-      int_vect_ce_n_i => int_vect_ce_n_s
+      int_vect_ce_n_i => int_vect_ce_n_s,
+      casOut_i        => casOut_s
     );
 	 
   -----------------------------------------------------------------------------
@@ -438,5 +451,57 @@ begin
       RETI_n    => RETI_n_s
     );
  
-end struct;
+ -----------------------------------------------------------------------------
+ -- CAS player
+ -----------------------------------------------------------------------------
+ 
+  tape : work.casPlayer
+    port map (
+    clk_i            => clk_i,
+    reset_n          => reset_n_i,
+    ioctl_addr_i     => ioctl_addr,
+    ioctl_dout_i     => ioctl_dout,
+    ioctl_index_i    => ioctl_index,
+    ioctl_wr_i       => ioctl_wr,
+    ioctl_download_i => ioctl_download,
+    casOut_o         => casOut_s,
+    mem_addr_o       => buff_mem_addr,
+    mem_dout_i       => buff_mem_dout,
+    mem_din_o        => buff_mem_din,
+    mem_wr_o         => buff_mem_wr,
+    mem_rd_o         => buff_mem_rd,
+    mem_ready_i      => buff_mem_ready,
+    casOn_i          => casOn_s,
+    casSpeed_i       => casSpeed
+    );
+    
+-----------------------------------------------------------------------------
+-- BUFFER DDRAM
+-----------------------------------------------------------------------------
+
+  DDRAM_CLK <= clk_i;
+  
+  buff : ddram
+    port map (
+      DDRAM_CLK => clk_i,
+      DDRAM_BUSY => DDRAM_BUSY,
+      DDRAM_BURSTCNT => DDRAM_BURSTCNT,
+      DDRAM_ADDR => DDRAM_ADDR,
+      DDRAM_DOUT => DDRAM_DOUT,
+      DDRAM_DOUT_READY => DDRAM_DOUT_READY,
+      DDRAM_RD => DDRAM_RD,
+      DDRAM_DIN => DDRAM_DIN,
+      DDRAM_BE => DDRAM_BE,
+      DDRAM_WE => DDRAM_WE,
+      addr => buff_mem_addr,
+      dout => buff_mem_dout,
+      din => buff_mem_din,
+      we => buff_mem_wr,
+      rd => buff_mem_rd,
+      ready => buff_mem_ready,
+      reset => not reset_n_i
+    ); 
+
+  
+  end struct;
 

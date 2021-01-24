@@ -47,7 +47,8 @@ entity addr_dec is
     kb_ce_n_o       : out std_logic;
     cas_ce_n_o      : out std_logic;
     ctc_ce_n_o      : out std_logic;
-    int_vect_ce_n_o : out std_logic
+    int_vect_ce_n_o : out std_logic;
+    casOn_o         : out std_logic := '0'
   );
 
 end addr_dec;
@@ -56,6 +57,7 @@ end addr_dec;
 architecture rtl of addr_dec is
      signal io_s  : boolean;
      signal mem_s : boolean;
+     signal cas_we_n_o : std_logic;
 begin
   io_s  <= iorq_n_i = '0' and m1_n_i = '1';
   mem_s <= mreq_n_i = '0' and rfsh_n_i = '1';
@@ -70,9 +72,19 @@ begin
   vdp_w_n_o       <= '0' when io_s and a_i(7 downto 4) = "0001"     AND wr_n_i = '0' else '1' ;    -- VDP wr
   kb_ce_n_o       <= '0' when io_s and a_i(7 downto 4) = "0011"     AND rd_n_i = '0' else '1' ;    -- KB rd
   cas_ce_n_o      <= '0' when io_s and a_i(7 downto 4) = "0101"     AND rd_n_i = '0' else '1' ;    -- CAS rd
+  cas_we_n_o      <= '0' when io_s and a_i(7 downto 4) = "0101"     AND wr_n_i = '0' else '1' ;    -- CAS wr
   ctc_ce_n_o      <= '0' when io_s and a_i(7 downto 4) = "0000"                      else '1' ;    -- CTC rd
   psg_we_n_o      <= '0' when io_s and a_i(7 downto 0) = "00100000" AND wr_n_i = '0' else '1' ;    -- SGC wr
   -- INT
   int_vect_ce_n_o <= '0' when m1_n_i='0' and iorq_n_i='0' else '1'; 
 
+  casOn : process (cas_we_n_o, reset_n_i)
+  begin
+    if reset_n_i = '0' then 
+      casOn_o <= '0';
+    elsif cas_we_n_o'event and cas_we_n_o = '1' then
+      casOn_o <= d_i(1);
+    end if;
+  end process;
+  
 end rtl;
