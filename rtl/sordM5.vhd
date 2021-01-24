@@ -58,7 +58,18 @@ entity sordM5 is
     ioctl_dout      : in std_logic_vector( 7 downto 0);
     ioctl_index     : in std_logic_vector( 7 downto 0);
     ioctl_wr        : in std_logic;
-    ioctl_download  : in std_logic    
+    ioctl_download  : in std_logic;
+    -- DDRAM --------------------------------------------------------
+    DDRAM_CLK       : out std_logic;
+    DDRAM_BUSY      : in std_logic;
+    DDRAM_BURSTCNT  : out std_logic_vector( 7 downto 0);
+    DDRAM_ADDR      : out std_logic_vector( 28 downto 0);
+    DDRAM_DOUT      : in std_logic_vector( 63 downto 0);
+    DDRAM_DOUT_READY :in std_logic;
+    DDRAM_RD        : out std_logic;
+    DDRAM_DIN       : out std_logic_vector( 63 downto 0);
+    DDRAM_BE        : out std_logic_vector( 7 downto 0);
+    DDRAM_WE        : out std_logic
   );
 
 end sordM5;
@@ -142,6 +153,27 @@ architecture struct of sordM5 is
   
   signal rom_ioctl_we_s   : std_logic;
   
+  component ddram is
+    port (
+      DDRAM_CLK       : in  std_logic;
+      DDRAM_BUSY      : in  std_logic;
+      DDRAM_BURSTCNT  : out std_logic_vector( 7 downto 0);
+      DDRAM_ADDR      : out std_logic_vector( 28 downto 0);
+      DDRAM_DOUT      : in  std_logic_vector( 63 downto 0);
+      DDRAM_DOUT_READY :in  std_logic;
+      DDRAM_RD        : out std_logic;
+      DDRAM_DIN       : out std_logic_vector( 63 downto 0);
+      DDRAM_BE        : out std_logic_vector( 7 downto 0);
+      DDRAM_WE        : out std_logic;
+      addr            : in  std_logic_vector( 27 downto 0);
+      dout            : out std_logic_vector( 7 downto 0);
+      din             : in  std_logic_vector( 7 downto 0);
+      we              : in  std_logic; 
+      rd              : in  std_logic; 
+      ready           : out std_logic;  
+      reset           : in  std_logic
+    );
+  end component ddram;  
 
 begin
 
