@@ -60,6 +60,7 @@ set_global_assignment -name SEED 1
 source sys/sys.tcl
 source sys/sys_analog.tcl
 source files.qip
+set_global_assignment -name VHDL_FILE rtl/Tape/tape.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/ddram.sv
 set_global_assignment -name VHDL_FILE rtl/CTC/ctc_channel.vhd
 set_global_assignment -name VHDL_FILE rtl/CTC/ctc.vhd
