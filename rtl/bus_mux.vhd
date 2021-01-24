@@ -38,6 +38,7 @@ entity bus_mux is
     kb_d_i          : in  std_logic_vector(7 downto 0);
     ctc_d_i         : in  std_logic_vector(7 downto 0);
     kb_rst_i        : in  std_logic;
+    casOut_i        : in  std_logic;
     d_o             : out std_logic_vector(7 downto 0)
     
   );
@@ -53,6 +54,6 @@ begin
              ram_d_i                             when (ram_ce_n_i = '0' ) else
              vdp_d_i                             when (vdp_r_n_i = '0' ) else
              kb_d_i                              when (kb_ce_n_i = '0' ) else
-             (7 => kb_rst_i, others => '0')      when (cas_ce_n_i = '0' ) else
+             (7 => kb_rst_i, 0=> casOut_i, others => '0') when (cas_ce_n_i = '0' ) else
              (others => '1');
 end rtl;
