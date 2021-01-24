@@ -183,7 +183,7 @@ assign VGA_SCALER = 0;
 
 assign AUDIO_MIX = 0;
 assign AUDIO_S = 0;
-assign LED_USER = 0;
+assign LED_USER = ioctl_download;
 
 assign LED_DISK = 0;
 assign LED_POWER = 0;
@@ -191,7 +191,7 @@ assign BUTTONS = 0;
 
 //////////////////////////////////////////////////////////////////
 
-wire [1:0] ar = status[9:8];
+wire [1:0] ar = status[2:1];
 
 assign VIDEO_ARX = (!ar) ? 12'd4 : (ar - 1'd1);
 assign VIDEO_ARY = (!ar) ? 12'd3 : 12'd0;
@@ -203,8 +203,9 @@ localparam CONF_STR = {
   "F1,binROM,Load to ROM;",
   "F2,CAS,Load Tape;",
   "O5,Speed up CAS,No,Yes;",
-  "O89,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
-	"-;",
+  "O12,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
+  "O79,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
+  "O6,Border,No,Yes;",
 	"-;",
 	"T0,Reset;",
 	"R0,Reset and close OSD;",
@@ -221,7 +222,6 @@ wire  [7:0] ioctl_index;
 wire        ioctl_wr;
 wire [24:0] ioctl_addr;
 wire  [7:0] ioctl_dout;
-wire 			ioctl_wait;
 wire        forced_scandoubler;
 wire [21:0] gamma_bus;
 
@@ -229,15 +229,15 @@ hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 (
 	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
-	.EXT_BUS(),
-	.gamma_bus(),
+	// .EXT_BUS(),
+	.gamma_bus(gamma_bus),
 
 	.conf_str(CONF_STR),
 	.forced_scandoubler(forced_scandoubler),
 
-	.buttons(buttons),
+	//.buttons(buttons),
 	.status(status),
-	.status_menumask({status[5]}),
+	//.status_menumask({status[5]}),
 
 	.ps2_key(ps2_key), 
 	
@@ -245,8 +245,7 @@ hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 	.ioctl_addr(ioctl_addr),
 	.ioctl_dout(ioctl_dout),
 	.ioctl_download(ioctl_download),
-	.ioctl_index(ioctl_index),
-	.ioctl_wait(ioctl_wait)
+	.ioctl_index(ioctl_index)
 );
 
 ///////////////////////   CLOCKS   ///////////////////////////////
