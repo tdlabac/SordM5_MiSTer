@@ -191,7 +191,7 @@ assign BUTTONS = 0;
 
 //////////////////////////////////////////////////////////////////
 
-wire [1:0] ar = status[2:1];
+wire [1:0] ar = status[9:8];
 
 assign VIDEO_ARX = (!ar) ? 12'd4 : (ar - 1'd1);
 assign VIDEO_ARY = (!ar) ? 12'd3 : 12'd0;
@@ -203,10 +203,19 @@ localparam CONF_STR = {
   "F1,binROM,Load to ROM;",
   "F2,CAS,Load Tape;",
   "O5,Speed up CAS,No,Yes;",
-  "O12,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
+	"-;",
+  "OGH,Memory extension,None,EM-5,64kbi,64krx;",
+  "P1,64kbi switch;",
+  "P1-;",
+  "P1OI,Memory mode,32KB,64KB;",
+  "P1OJ,Monitor deactivate,No,Yes;",
+  "P1OK,Write protect,No,Yes;",
+  "P1OL,Autostart,ROM,RAM;",
+	"-;",
+  "O89,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
   "O79,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
   "O6,Border,No,Yes;",
-	"-;",
+  "-;",
 	"T0,Reset;",
 	"R0,Reset and close OSD;",
 	"V,v",`BUILD_DATE 
@@ -317,7 +326,8 @@ sordM5 SordM5
   .DDRAM_BE ( DDRAM_BE),
   .DDRAM_WE ( DDRAM_WE),
   .DDRAM_CLK ( DDRAM_CLK),
-  .casSpeed (status[5])
+  .casSpeed (status[5]),
+  .ramMode_i (status[21:16])
 );
 
 assign VGA_SL = sl[1:0];

@@ -39,6 +39,7 @@ entity sordM5 is
     por_n_o         : out std_logic;
     -- Interface
     ps2_key_i       : in  std_logic_vector(10 downto 0);
+    ramMode_i       : in  std_logic_vector(5 downto 0);
     -- RGB Video Interface ----------------------------------------------------
     border_i        : in  std_logic;
     col_o           : out std_logic_vector( 3 downto 0);
@@ -152,8 +153,7 @@ architecture struct of sordM5 is
   signal ram_di_s         : std_logic_vector( 7 downto 0);
   
   -- rom 
-  signal bios_di_s        : std_logic_vector( 7 downto 0);
-  
+  signal bios_di_s        : std_logic_vector( 7 downto 0);  
   signal rom_ioctl_we_s   : std_logic;
   
   -- ddram buffer
@@ -357,7 +357,8 @@ begin
       cas_ce_n_o      => cas_ce_n_s, 
       ctc_ce_n_o      => ctc_ce_n_s,
       int_vect_ce_n_o => int_vect_ce_n_s,
-      casOn_o         => casOn_s
+      casOn_o         => casOn_s, 
+      ramMode_i       => ramMode_i
     );
 
   -----------------------------------------------------------------------------
