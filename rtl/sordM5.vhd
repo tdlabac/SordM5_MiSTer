@@ -407,7 +407,8 @@ begin
   
   ram : work.dpram
     generic map (
-      addr_width => 16
+      addr_width => 16,
+      mem_init_file => "rtl/empty.mif"
     )
     port map (
 		clock => clk_i,
