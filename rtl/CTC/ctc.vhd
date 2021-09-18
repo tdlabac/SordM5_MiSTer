@@ -36,6 +36,7 @@ entity ctc is
         en    : in std_logic; -- negative
 		  
         dIn   : in std_logic_vector(7 downto 0);
+        dInCpu: in std_logic_vector(7 downto 0);
         dOut  : out std_logic_vector(7 downto 0);
         
         cs    : in std_logic_vector(1 downto 0);
@@ -45,8 +46,7 @@ entity ctc is
         int_n : out std_logic := '1';
                
         clk_trg : in std_logic_vector(3 downto 0);
-        zc_to   : out std_logic_vector(3 downto 0);
-        RETI_n	: in std_logic
+        zc_to   : out std_logic_vector(3 downto 0)
     );
 end ctc;
 
@@ -60,13 +60,14 @@ architecture rtl of ctc is
     signal irqVect    : std_logic_vector(7 downto 3) := (others => '0');
 	 signal intAckChannel : std_logic_vector(1 downto 0):= (others => '0');
     
-    type states is (idle, waitIntAccepted, waitReti,waitForM1 );
+    type states is (idle, waitIntAccepted, waitReti);
 	 signal state         : states := idle;
 	 signal cpuACKint     : std_logic;
 	 signal internalInt   : std_logic_vector(3 downto 0) := (others => '0');
 	 signal lastInt       : std_logic_vector(3 downto 0) := (others => '0');
-    signal int           : std_logic_vector(3 downto 0) := (others => '0');
+	 signal int           : std_logic_vector(3 downto 0) := (others => '0');
 	 signal count         : std_logic_vector(1 downto 0);
+	 signal reti			 : std_logic := '0';
 
 begin
     cpuACKint <= '1' when iorq_n='0' and m1_n='0' else '0';
@@ -105,13 +106,13 @@ begin
           int_n <='0';
         end if;
         when waitIntAccepted =>
-          if cpuACKint = '1' then -- incoming ack
+          if cpuACKint = '1' then -- incoming ack		  
             int_n <='1';
-            for i in 0 to 3 -- 0 is highest prio
+            for i in 0 to 3 -- 0 is highest prio            
             loop
               if internalInt(i)='1' then
                 internalInt(i) <= '0' ; --reset int
-                counterInt := i;
+                counterInt := i;				  
                 exit;
               end if;
             end loop;
@@ -120,23 +121,13 @@ begin
             int_n <='0';
           end if;
         when waitReti =>
-          if RETI_n = '0' then 
-            state <= waitForM1;
-            count <= "11";
-          end if;
-        when others =>
-          if m1_n = '0' and count(0) = '1' then -- first ignore
-            count(0) <= '0';
-          end if;
-          if m1_n = '1' and count(0) = '0' then
-            count(1) <= '0';
-          end if;
-          if m1_n = '0' and count(1) = '0' then
+          if reti = '1' then
             state <= idle;
           end if;
+        when others =>
         end case;
-
-        for i in 0 to 3
+		  
+		  for i in 0 to 3
         loop
           if lastInt(i) = '0' and int(i) = '1' then	-- new interupt
             internalInt(i) <= '1';
@@ -175,4 +166,31 @@ begin
             
         cEn(i) <= '1' when (en='0' and iorq_n='0' and m1_n='1' and to_integer(unsigned(cs))=i) else '0';
     end generate;
+
+findReti : process
+	variable retiState : std_logic := '0';
+	variable opcode : std_logic_vector(7 downto 0);
+	variable last_opcodeRead : std_logic := '0';	
+	begin
+		wait until rising_edge(clk);
+		reti <= '0';
+		if m1_n = '0' and iorq_n = '1' and rd_n = '0' then
+			opcode := dInCpu;
+			last_opcodeRead := '1';
+		else 
+			if last_opcodeRead = '1' then
+				last_opcodeRead := '0';
+				if retiState = '0' then
+					if opcode = x"ED" then
+						retiState := '1';
+					end if;
+				else 
+					if opcode = x"4D" then
+						reti <= '1';
+					end if;
+					retiState := '0';
+				end if;
+			end if;
+		end if;
+	end process;
 end;

@@ -241,8 +241,7 @@ begin
       BUSAK_n    => open,
       A          => a_s,
       DI         => d_to_cpu_s,
-      DO         => d_from_cpu_s, 
-      RETI_n     => RETI_n_s
+      DO         => d_from_cpu_s
     );
 
 
@@ -443,14 +442,14 @@ begin
       en        => ctc_ce_n_s,        
       dIn       => d_from_cpu_s,
       dOut      => d_from_ctc_s,        
-      cs        => a_s(1 downto 0),
+      dInCpu    => d_to_cpu_s,      
+		cs        => a_s(1 downto 0),
       m1_n      => m1_n_s,
       iorq_n    => iorq_n_s,
       rd_n      => rd_n_s,
       int_n     => int_n_s,
       clk_trg   => (vdp_int_n_s & "111"),
-      clk_sys_i => clk_en_3m58_p_s,
-      RETI_n    => RETI_n_s
+      clk_sys_i => clk_en_3m58_p_s
     );
  
  -----------------------------------------------------------------------------
