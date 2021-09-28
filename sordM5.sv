@@ -196,7 +196,7 @@ assign BUTTONS = 0;
 
 //////////////////////////////////////////////////////////////////
 
-wire [1:0] ar = status[9:8];
+wire [1:0] ar = status[13:12];
 
 assign VIDEO_ARX = (!ar) ? 12'd4 : (ar - 1'd1);
 assign VIDEO_ARY = (!ar) ? 12'd3 : 12'd0;
@@ -205,24 +205,24 @@ assign VIDEO_ARY = (!ar) ? 12'd3 : 12'd0;
 localparam CONF_STR = {
 	"Sord M5;;",
 	"-;",
-  "F1,binROM,Load to ROM;",
-  "F2,CAS,Load Tape;",
-  "O5,Speed up CAS,No,Yes;",
-	"-;",
-  "OGH,Memory extension,None,EM-5,64kbi,64krx;",
-  "P1,64kbi switch;",
-  "P1-;",
-  "P1OI,Memory mode,32KB,64KB;",
-  "P1OJ,Monitor deactivate,No,Yes;",
-  "P1OK,Write protect,No,Yes;",
-  "P1OL,Autostart,ROM,RAM;",
-	"-;",
-  "O89,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
-  "O79,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
-  "O6,Border,No,Yes;",
+  "O02,Memory extension,None,EM-5,EM-64,64KBF,64KRX,BrnoMod;",
+  "h0O34,Cartrige,None,BASIC-I,BASIC-G,BASIC-F;",
+  "h1O5,EM64 mode,64KB,32KB;",
+  "h1O6,EM64 mon. deactivate,Dis.,En.;",
+  "h1O7,EM64 wp low 32KB,Dis.,En.;",
+  "h1O8,EM64 boot on,ROM,RAM;",  
+  "h2F1,binROM,Load to ROM;",
   "-;",
-	"T0,Reset;",
-	"R0,Reset and close OSD;",
+  "F2,CAS,Load Tape;",
+  "O9,Fast Tape Load,On,Off;",
+	"-;",
+	"-;",
+  "OCD,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
+  "OEF,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
+  "OG,Border,No,Yes;",
+  "-;",
+	"TH,Reset;",
+	"RH,Reset and close OSD;",
 	"V,v",`BUILD_DATE 
 };
 
@@ -238,6 +238,9 @@ wire [24:0] ioctl_addr;
 wire  [7:0] ioctl_dout;
 wire        forced_scandoubler;
 wire [21:0] gamma_bus;
+wire        cart_enable = status[2:1] ==  2'b00 | status[2:0] == 3'b010;
+wire        binary_load_enable = cart_enable & status[4:3] == 2'b00;
+wire        kb64_enable = status[2:0] == 3'b010;
 
 hps_io #(.CONF_STR(CONF_STR)) hps_io
 (
@@ -250,8 +253,7 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
 	//.buttons(buttons),
 	.status(status),
-	//.status_menumask({status[5]}),
-
+   .status_menumask({binary_load_enable,kb64_enable, cart_enable}),
 	.ps2_key(ps2_key), 
 	
 	.ioctl_wr(ioctl_wr),
@@ -282,8 +284,13 @@ always @(posedge clk_sys) begin
 end
 
 /////////////////  RESET  /////////////////////////
+reg [4:0] old_ram_mode = 5'd0;
+always @(posedge clk_sys) begin
+	old_ram_mode <= status[4:0];
+end
 
-wire reset = RESET | status[0] | buttons[1] | (ioctl_index == 8'd1 & ioctl_download);
+wire ram_mode_changed = old_ram_mode == status[4:0] ? 1'b0 : 1'b1 ;
+wire reset = RESET | ram_mode_changed | buttons[1] | status[17] | (ioctl_index == 8'd1 & ioctl_download);
 
 
 ////////////////  Console  ////////////////////////
@@ -305,7 +312,7 @@ sordM5 SordM5
 	.clk_en_10m7_i(ce_10m7),
 	.reset_n_i(~reset),
 	.por_n_o(),
-	.border_i(status[6]),
+	.border_i(status[16]),
 	.rgb_r_o(R),
 	.rgb_g_o(G),
 	.rgb_b_o(B),
@@ -330,13 +337,13 @@ sordM5 SordM5
   .DDRAM_BE ( DDRAM_BE),
   .DDRAM_WE ( DDRAM_WE),
   .DDRAM_CLK ( DDRAM_CLK),
-  .casSpeed (status[5]),
-  .ramMode_i (status[21:16])
+  .casSpeed (status[9]),
+  .ramMode_i (status[8:0])
 );
 
 assign VGA_SL = sl[1:0];
 
-wire [2:0] scale = status[9:7];
+wire [2:0] scale = status[15:14];
 wire [2:0] sl = scale ? scale - 1'd1 : 3'd0;
 
 reg hs_o, vs_o;
