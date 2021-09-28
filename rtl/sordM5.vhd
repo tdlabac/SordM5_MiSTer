@@ -128,9 +128,6 @@ architecture struct of sordM5 is
   signal int_ctc_ack_s    : std_logic_vector(3 downto 0);
   
   -- Address decoder signals
-  signal bios_ce_n_s      : std_logic;
-  signal ram_ce_n_s       : std_logic;
-  signal ram_we_n_s       : std_logic;
   signal vdp_r_n_s		    : std_logic;
   signal vdp_w_n_s        : std_logic;
   signal psg_we_n_s       : std_logic;
@@ -148,13 +145,8 @@ architecture struct of sordM5 is
   signal vram_do_s        : std_logic_vector( 7 downto 0);
   signal vram_di_s        : std_logic_vector( 7 downto 0);
   
-  -- ram
-  signal ioctl_addr_off   : std_logic_vector(15 downto 0);
-  signal ram_di_s         : std_logic_vector( 7 downto 0);
-  
-  -- rom 
-  signal bios_di_s        : std_logic_vector( 7 downto 0);  
-  signal rom_ioctl_we_s   : std_logic;
+  -- ram/rom
+  signal ram_d_s         : std_logic_vector( 7 downto 0);
   
   -- ddram buffer
   signal buff_mem_addr    : std_logic_vector(27 downto 0);
@@ -343,12 +335,7 @@ begin
       iorq_n_i        => iorq_n_s,
       rd_n_i          => rd_n_s,
       wr_n_i          => wr_n_s,
-      mreq_n_i        => mreq_n_s,
-      rfsh_n_i        => rfsh_n_s,
       m1_n_i          => m1_n_s,
-      bios_ce_n_o     => bios_ce_n_s,
-      ram_ce_n_o      => ram_ce_n_s,
-      ram_we_n_o      => ram_we_n_s,
       vdp_r_n_o       => vdp_r_n_s,
       vdp_w_n_o       => vdp_w_n_s,
       psg_we_n_o      => psg_we_n_s,
@@ -356,8 +343,7 @@ begin
       cas_ce_n_o      => cas_ce_n_s, 
       ctc_ce_n_o      => ctc_ce_n_s,
       int_vect_ce_n_o => int_vect_ce_n_s,
-      casOn_o         => casOn_s, 
-      ramMode_i       => ramMode_i
+      casOn_o         => casOn_s 
     );
 
   -----------------------------------------------------------------------------
@@ -366,11 +352,9 @@ begin
 
   bus_mux : work.bus_mux
     port map (
-      bios_ce_n_i     => bios_ce_n_s,
-      ram_ce_n_i      => ram_ce_n_s,
+      mreq_n_i        => mreq_n_s,
+      rfsh_n_i        => rfsh_n_s,
       vdp_r_n_i       => vdp_r_n_s,
-      bios_d_i        => bios_di_s,
-      ram_d_i         => ram_di_s,
       vdp_d_i         => d_from_vdp_s,
       d_o             => d_to_cpu_s, 
       kb_d_i          => kb_do_s,
@@ -380,7 +364,9 @@ begin
       ctc_ce_n_i      => ctc_ce_n_s,
       ctc_d_i         => d_from_ctc_s,
       int_vect_ce_n_i => int_vect_ce_n_s,
-      casOut_i        => casOut_s
+      casOut_i        => casOut_s,
+      rd_n_i          => rd_n_s,
+      ram_d_i         => ram_d_s 
     );
 	 
   -----------------------------------------------------------------------------
@@ -400,37 +386,27 @@ begin
 		q => vram_di_s
 	 );
 	 
-  
-  rom_ioctl_we_s <= '1' when ioctl_index = "00000001" AND ioctl_wr = '1' AND ioctl_download = '1' else '0';
-  ioctl_addr_off <= ioctl_addr(15 downto 0) + 8192; 
-  
-  ram : work.dpram
-    generic map (
-      addr_width => 16,
-      mem_init_file => "rtl/empty.mif"
-    )
+   sordM5_ram : work.sordM5_rams
     port map (
-		clock => clk_i,
-		address_a => a_s(15 downto 0),
-		wren_a => clk_en_10m7_i AND NOT(ram_we_n_s),
-		data_a => d_from_cpu_s,
-		q_a => ram_di_s,
-    address_b(15 downto 0) => ioctl_addr_off,
-    data_b => ioctl_dout,
-    wren_b => rom_ioctl_we_s
+      clk_i          => clk_i,
+      reset_n_i      => reset_n_i,
+      a_i            => a_s,
+      d_i            => d_from_cpu_s,
+      d_o            => ram_d_s,
+      iorq_n_i       => iorq_n_s,
+      m1_n_i         => m1_n_s,
+      rd_n_i         => rd_n_s,
+      wr_n_i         => wr_n_s,
+      mreq_n_i       => mreq_n_s,
+      rfsh_n_i       => rfsh_n_s,
+      ramMode_i      => ramMode_i,
+      ioctl_addr     => ioctl_addr,
+      ioctl_dout     => ioctl_dout,
+      ioctl_index    => ioctl_index,
+      ioctl_wr       => ioctl_wr,
+      ioctl_download => ioctl_download
 	 );
 
-  bios : work.spram
-    generic map (
-      addr_width => 13,
-      mem_init_file => "rtl/sordint.MIF",
-      mem_name => "BIOS"
-    )
-    port map (
-      clock => clk_i,
-      address => a_s(12 downto 0),
-      q => bios_di_s
-     );
  -----------------------------------------------------------------------------
  -- Interupt CTC
  -----------------------------------------------------------------------------
