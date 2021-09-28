@@ -47,7 +47,7 @@ entity addr_dec is
     ctc_ce_n_o      : out std_logic;
     int_vect_ce_n_o : out std_logic;
     casOn_o         : out std_logic := '0';
-    ramMode_i       : in  std_logic_vector(5 downto 0)
+    ramMode_i       : in  std_logic_vector(8 downto 0)
   );
 
 end addr_dec;

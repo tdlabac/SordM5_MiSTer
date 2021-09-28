@@ -39,7 +39,7 @@ entity sordM5 is
     por_n_o         : out std_logic;
     -- Interface
     ps2_key_i       : in  std_logic_vector(10 downto 0);
-    ramMode_i       : in  std_logic_vector(5 downto 0);
+    ramMode_i       : in  std_logic_vector(8 downto 0);
     -- RGB Video Interface ----------------------------------------------------
     border_i        : in  std_logic;
     col_o           : out std_logic_vector( 3 downto 0);
