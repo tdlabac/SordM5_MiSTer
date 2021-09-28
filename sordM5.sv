@@ -284,8 +284,13 @@ always @(posedge clk_sys) begin
 end
 
 /////////////////  RESET  /////////////////////////
+reg [4:0] old_ram_mode = 5'd0;
+always @(posedge clk_sys) begin
+	old_ram_mode <= status[4:0];
+end
 
-wire reset = RESET | buttons[1] | status[17] | (ioctl_index == 8'd1 & ioctl_download);
+wire ram_mode_changed = old_ram_mode == status[4:0] ? 1'b0 : 1'b1 ;
+wire reset = RESET | ram_mode_changed | buttons[1] | status[17] | (ioctl_index == 8'd1 & ioctl_download);
 
 
 ////////////////  Console  ////////////////////////
