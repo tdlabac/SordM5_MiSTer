@@ -40,6 +40,7 @@ entity sordM5 is
     -- Interface
     ps2_key_i       : in  std_logic_vector(10 downto 0);
     ramMode_i       : in  std_logic_vector(8 downto 0);
+    tape_sound_i    : in  std_logic;
     -- RGB Video Interface ----------------------------------------------------
     border_i        : in  std_logic;
     col_o           : out std_logic_vector( 3 downto 0);
@@ -181,7 +182,7 @@ architecture struct of sordM5 is
 begin
 
   vdd_s <= '1';
-  audio_o <= ('0'&psg_audio_s&"00");
+  audio_o <= (casOut_s&psg_audio_s&"00") when tape_sound_i = '0' else ('0'&psg_audio_s&"00");
   nmi_n_s <= '1'; 
 
   -----------------------------------------------------------------------------

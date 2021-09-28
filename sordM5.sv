@@ -215,6 +215,7 @@ localparam CONF_STR = {
   "-;",
   "F2,CAS,Load Tape;",
   "O9,Fast Tape Load,On,Off;",
+  "OA,Tape Sound,On,Off;",
 	"-;",
 	"-;",
   "OCD,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
@@ -338,6 +339,7 @@ sordM5 SordM5
   .DDRAM_WE ( DDRAM_WE),
   .DDRAM_CLK ( DDRAM_CLK),
   .casSpeed (status[9]),
+  .tape_sound_i (status[10]),
   .ramMode_i (status[8:0])
 );
 
