@@ -1,48 +1,72 @@
-# Template core for MiSTer
+# Sord M5
+From Wikipedia, the free encyclopedia
 
-## General description
-This core contains the latest version of framework and will be updated when framework is updated. There will be no releases. This core is only for developers. Besides the framework, core demonstrates the basic usage. New or ported cores should use it as a template.
+The Sord M5 is a home computer launched by Sord Computer Corporation in 1982. Primarily the Sord M5 competed in the Japanese home computer market. It was also sold as the CGL M5 in the United Kingdom by Computer Games Limited and was reasonably popular in Czechoslovakia, where the M5 stood as one of the first affordable computers available to the general public. Takara also sold models in Japan as the Game M5, and models were also exported to South Korea.
 
-It's highly recommended to follow the notes to keep it standardized for easier maintenance and collaboration with other developers.
+Original models of the Sord M5 are relatively small by home computing standards, with a built-in keyboard with rubber keys, similar to the ZX Spectrum, which is also sold in many countries such as the United Kingdom itself, Ireland, Spain, the Netherlands, Singapore, Malaysia, Sweden, Norway, Denmark, Canada, New Zealand, Australia, Greece, Israel and Hong Kong as the Sord M5 Creative Computer, which included a carrying case for the computer. The specifications of the computer are very similar to the MSX, a computer that likely forced the Sord M5 (along with many similar Japanese computers) out of the market by the mid-1980s.
 
-## Source structure
+The CGL M5 was released in the UK with an introductory price of £195, higher than many of the system's competitors including the ZX Spectrum, and Commodore VIC-20. Whereas the M5 contained a cartridge slot in an age where most computers were using compact cassettes or floppy disks, the small amount of built-in RAM led to few games being produced for the system.
 
-### Legend:
-* `<core_name>` - you have to use the same name where you see this in this manual. Basically it's your core name.
+In South Korea, three electronics companies released different personal computers based on Sord M5. The FC-150 was produced and released by LG, Samsung released the SPC-500, and the TommyCom was manufactured and launched by Koryo Systems. These computers supported the Korean alphabet, Hangul. The system specifications of these computers were identical to the original M5, but they had differently shaped cartridge slots. Cartridges from the Sord M5 or other manufacturers could not be used for these computers directly. LG released some original software including several educational programs and games.
 
-### Standard MiSTer core should have following folders:
-* `sys` - the framework. Basically it's prohibited to change any files in this folder. Framework updates may erase any customization in this folder. All MiSTer cores have to include sys folder as is from this core.
-* `rtl` - the actual source of core. It's up to the developer how to organize the inner structure of this folder. Exception is pll folder/files (see below).
-* `releases` - the folder where rbf files should be placed. format of each rbf is: <core_name>_YYYYMMDD.rbf (YYYYMMDD is date code of release).
+Despite its short production run, the M5 was supported by various big Japanese game developers such as Namco and Konami.
 
-### Other standard files:
-* `<core_name>.qpf`- quartus project file. Copy it as is and then modify the line `PROJECT_REVISION = "<core_name>"` according to your core name.
-* `<core_name>.qsf` - quartus settings file. In most cases you don't need to modify anything inside (although you may wont to adjust some settings in quartus - this is fine, but keep changes minimal). You also need to watch this file before you make a commit. Quartus in some conditions may "spit" all settings from different files into this file so it will become large. If you see this, then simply revert it to original file.
-* `<core_name>.srf` - optional file to disable some warnings which are safe to disable and make message list more clean, so you will have less chance to miss some improtant warnings. You are free to modify it.
-* `<core_name>.sdc` - optional file for constraints in case if core require some special constraints. You are free to modify it.
-* `<core_name>.sv` - glue logic between framework and core. This is where you adapt core specific signals to framework.
-* `files.qip` - list of all core files. You need to edit it manually to add/remove files. Quartus will use this file but can't edit it. If you add files in Quartus IDE, then they will be added to `<core_name>.qsf` which is recommended manually move them to `files.qip`.
-* `clean.bat` - windows batch file to clean the whole project from temporary files. In most cases you don't need to modify it.
-* `.gitignore` - list of files should be ignored by git, so temprorary files wont be included in commits.
-* `jtag.cdf` - it will be produced when you compile the core. By clicking it in Quartus IDE, you will launch programmer where you can send the core to MiSTer over USB blaster cable (see manual for DE10-nano how to connect it). This file normally is not presend on cleaned project and not includede in commits.
+Other models include the M5 Pro and M5 Jr. 
 
-### PLL:
-Framework implies use of at least one PLL in the core. Framework doesn't comtain this PLL but requires it to be placed in `rtl` folder, so `pll` folder and `pll.v`, `pll.qip` files must be present, however PLL settings are up to the core.
+## Technical specifications
+### Internal hardware
+* CPU: Zilog Z80, 3.58 MHz
+* Video Hardware: TMS9918
+  * 40×24 text (6×8 characters), 224 user defined characters
+  * 256×192 graphics, 16 colours
+  * 32 hardware sprites (up to 16×16 pixels)
+* Sound Hardware: SN76489
+  * 3 sound channels
+  * 1 noise channel
+  * 6 octaves, 15 amplitude levels
+* RAM: 20 kB (of which 16kB is screen memory)
+* ROM: 8 kB expandable to 16kB
 
-### Verilog Macros
+### I/O ports and power supply
+* I/O ports:
+  * TV out
+  * Video out (phono socket)
+  * Sound out (phono socket)
+  * Centronics 16-pin interface
+  * 8-pin DIN cassette connector
+  * Power supply: external
 
-The following macros can be defined and will affect the framework features:
+### Language cartridge options
+* BASIC-I
+  - Integer arithmetic only (16 bit signed)
+* BASIC-G
+  - Graphics and sound functions
+* BASIC-F
+  - Floating point arithmetic
+* FALC
+  - Applications package
 
-Macro          |   Effect
----------------|---------------------------------
-ARCADE_SYS     | Disables the UART and OSD status
-DEBUG_NOHDMI   | Disable HDMI-related modules. Speeds up compilation but only analogue/direct video is available
-DUAL_SDRAM     | Changes configuration of FPGA pins to work with dual SDRAM I/O boards
-USE_DDRAM      | Enables DDRAM ports of emu instance
-USE_SDRAM      | Enables SDRAM ports of emu instance
-USE_FB         | Allows to use framebuffer from the core
+## What is implemented
+### Basic HW
+* CPU
+* CTC
+* VDP TMS9918
+* Sound SN76489
 
+### Expansion modules
+* EM-5 32 KB RAM expansion (memory)
+* EM-64 64 KB RAM expansion
+* 64KBF 64 KB RAM expansion with Basic-F
+* 64KRX 64 KB RAM expansion with WINDOWS TOOL, BASIC-I, BASIC-G, BASIC-F, MSX emulation
+* Brno mod 64 KB RAM, 256 KB RAMDISK, WINDOWS TOOL, BASIC-I, CP/M loader
 
-# Quartus version
-Cores must be developed in **Quartus v17.0.x**. It's recommended to have updates, so it will be **v17.0.2**. Newer versions won't give any benefits to FPGA used in MiSTer, however they will introduce incompatibilities in project settings and it will make harder to maintain the core and collaborate with others. **So please stick to good old 17.0.x version.** You may use either Lite or Standard license.
+### Other
+* Cassette emulation. (CAS format)
+* ROM load.
 
+## For more info see
+* https://en.wikipedia.org/wiki/Sord_M5
+* https://www.msx.org/wiki/Sord_M5
+* https://dlabi.cz/
+* https://cs.wikipedia.org/wiki/Sord_M5
+* http://m5.arigato.cz/
