@@ -1,4 +1,8 @@
 //============================================================================
+//  Computer: Sord M5
+//
+//  Copyright (C) 2018 Sorgelig
+//  Copyright (C) 2021 molekula
 //
 //  This program is free software; you can redistribute it and/or modify it
 //  under the terms of the GNU General Public License as published by the Free
@@ -109,6 +113,11 @@ pll pll
 	.refclk(CLK_50M),
 	.rst(0),
 	.outclk_0(clk_sys)
+);
+
+SordM5 SordM5
+(
+	.clk_sys(clk_sys)
 );
 
 endmodule
