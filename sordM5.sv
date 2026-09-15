@@ -49,11 +49,6 @@ assign BUTTONS = 0;
 
 //////////////////////////////////////////////////////////////////
 
-wire [1:0] ar = status[122:121];
-
-assign VIDEO_ARX = (!ar) ? 12'd4 : (ar - 1'd1);
-assign VIDEO_ARY = (!ar) ? 12'd3 : 12'd0;
-
 `include "build_id.v" 
 localparam CONF_STR = {
 	"Template;;",
@@ -102,7 +97,6 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
 	.buttons(buttons),
 	.status(status),
-	.status_menumask({status[5]}),
 	
 	.ps2_key(ps2_key)
 );
@@ -116,58 +110,5 @@ pll pll
 	.rst(0),
 	.outclk_0(clk_sys)
 );
-
-wire reset = RESET | status[0] | buttons[1];
-
-wire [1:0] col = status[4:3];
-
-wire HBlank;
-wire HSync;
-wire VBlank;
-wire VSync;
-wire ce_pix;
-wire hvcnt_atzero;
-wire [7:0] video;
-
-// Leave H/V sync always on. This stabilizes the video output while the core
-// is in reset. This example releases the reset when H/V counters are at zero.
-reg reset_core = 1;
-always @(posedge clk_sys) begin
-	if(reset) reset_core <= 1;
-	else if(hvcnt_atzero) reset_core <= 0;
-end
-
-mycore mycore
-(
-	.clk(clk_sys),
-	.reset(reset_core),
-
-	.pal(status[2]),
-	.scandouble(forced_scandoubler),
-
-	.ce_pix(ce_pix),
-	.hvcnt_atzero(hvcnt_atzero),
-
-	.HBlank(HBlank),
-	.HSync(HSync),
-	.VBlank(VBlank),
-	.VSync(VSync),
-
-	.video(video)
-);
-
-assign CLK_VIDEO = clk_sys;
-assign CE_PIXEL = ce_pix;
-
-assign VGA_DE = ~(HBlank | VBlank);
-assign VGA_HS = HSync;
-assign VGA_VS = VSync;
-assign VGA_G  = (!col || col == 2) ? video : 8'd0;
-assign VGA_R  = (!col || col == 1) ? video : 8'd0;
-assign VGA_B  = (!col || col == 3) ? video : 8'd0;
-
-reg  [26:0] act_cnt;
-always @(posedge clk_sys) act_cnt <= act_cnt + 1'd1; 
-assign LED_USER    = act_cnt[26]  ? act_cnt[25:18]  > act_cnt[7:0]  : act_cnt[25:18]  <= act_cnt[7:0];
 
 endmodule
