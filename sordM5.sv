@@ -55,33 +55,16 @@ assign BUTTONS = 0;
 
 `include "build_id.v" 
 localparam CONF_STR = {
-	"Template;;",
+	"Sord M5;;",
 	"-;",
-	"O[122:121],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
-	"O[2],TV Mode,NTSC,PAL;",
-	"O[4:3],Noise,White,Red,Green,Blue;",
-	"-;",
-	"P1,Test Page 1;",
-	"P1-;",
-	"P1-, -= Options in page 1 =-;",
-	"P1-;",
-	"P1O[5],Option 1-1,Off,On;",
-	"d0P1F1,BIN;",
-	"H0P1O[10],Option 1-2,Off,On;",
-	"-;",
-	"P2,Test Page 2;",
-	"P2-;",
-	"P2-, -= Options in page 2 =-;",
-	"P2-;",
-	"P2S0,DSK;",
-	"P2O[7:6],Option 2,1,2,3,4;",
-	"-;",
+    "O[2:1],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
+    "O[5:3],Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
+    "O[8:6],Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer,HV-Integer;",
+    "O[9],Border,No,Yes;",
+	"O[10],Video,NTSC,PAL;",
 	"-;",
 	"T[0],Reset;",
 	"R[0],Reset and close OSD;",
-	"v,0;", // [optional] config version 0-99. 
-	        // If CONF_STR options are changed in incompatible way, then change version number too,
-			  // so all options will get default values on first start.
 	"V,v",`BUILD_DATE 
 };
 
@@ -95,13 +78,10 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
 	.EXT_BUS(),
-	.gamma_bus(),
-
+	.gamma_bus(gamma_bus),
 	.forced_scandoubler(forced_scandoubler),
-
 	.buttons(buttons),
 	.status(status),
-	
 	.ps2_key(ps2_key)
 );
 
@@ -114,10 +94,85 @@ pll pll
 	.rst(0),
 	.outclk_0(clk_sys)
 );
-
+logic [7:0] video_R, video_G, video_B;
+logic       video_HS, video_VS, video_hblank, video_vblank, video_blank, video_ce_pix;
+logic       TMS_interrupt;
 SordM5 SordM5
 (
-	.clk_sys(clk_sys)
+	.clk_sys(clk_sys),
+	.reset(RESET),
+	.TMS_border(status[9]),
+	.TMS_interrupt(TMS_interrupt),
+	.TMS_PAL(status[10]),
+	.video_R(video_R),
+    .video_G(video_G),
+    .video_B(video_B),
+    .video_HS(video_HS),
+    .video_VS(video_VS),
+    .video_hblank(video_hblank),
+    .video_vblank(video_vblank),
+    .video_blank(video_blank),
+	.video_ce_pix(video_ce_pix)
 );
+
+/////////////////  VIDEO  /////////////////
+logic scandoubler;
+logic [21:0] gamma_bus;
+
+
+logic      vga_de;
+logic [1:0] ar    = status[2:1];
+logic [2:0] scale = status[5:3];
+logic [2:0] sl    = scale != 0 ? scale - 1'd1 : 3'd0;
+
+assign VGA_SL = sl[1:0];
+assign CLK_VIDEO   = clk_sys;
+assign scandoubler = forced_scandoubler || scale != 0;
+
+reg  en216p;
+always_ff @(posedge CLK_VIDEO) begin
+	en216p <= ((HDMI_WIDTH == 1920) && (HDMI_HEIGHT == 1080) && !scandoubler);
+end
+
+video_freak video_freak
+(
+	.*,
+	.VGA_DE_IN(vga_de),
+    .VGA_VS(~video_VS),
+	.ARX((ar == 0) ? 12'd4 : {10'b0, (ar - 1'd1)}),
+	.ARY((ar == 0) ? 12'd3 : 12'd0),
+	.CROP_SIZE(en216p ? 12'd216 : 12'd0),
+	.CROP_OFF(0),
+	.SCALE(status[8:6])
+);
+
+video_mixer #(.GAMMA(1), .LINE_LENGTH(290)) video_mixer
+(
+   .CLK_VIDEO(CLK_VIDEO),
+   .hq2x(scale==1),
+   .scandoubler(scandoubler),
+   .gamma_bus(gamma_bus),
+
+   .ce_pix(video_ce_pix),
+   .R(video_R),
+   .G(video_G),
+   .B(video_B),
+   .HSync(~video_HS),
+   .VSync(~video_VS),
+   .HBlank(video_hblank),
+   .VBlank(video_vblank),
+
+   .HDMI_FREEZE(0),
+   .freeze_sync(),
+
+   .CE_PIXEL(CE_PIXEL),
+   .VGA_R(VGA_R),
+   .VGA_G(VGA_G),
+   .VGA_B(VGA_B),
+   .VGA_VS(VGA_VS),
+   .VGA_HS(VGA_HS),
+   .VGA_DE(vga_de)
+);
+
 
 endmodule
