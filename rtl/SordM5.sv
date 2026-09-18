@@ -99,6 +99,19 @@ assign DI = RD_n          ? 8'hFF    :
             AREA_TMS      ? DATA_TMS :
             8'hFF;
 
+logic CE_CTC_n;
+ga015 ga015_i
+(
+   .A(A),
+   .D(DO),
+   .RST_n(!reset),
+   .MRQ_n(MREQ_n),
+   .IORQ_n(IORQ_n),
+   .RD_n(RD_n),
+   .WR_n(WR_n),
+   .CTC_n(CE_CTC_n)
+);
+
 /*verilator tracing_off*/
 logic vram_we;
 logic [7:0] vram_di, vram_do, DATA_TMS;
