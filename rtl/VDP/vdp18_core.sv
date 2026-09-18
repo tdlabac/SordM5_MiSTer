@@ -214,7 +214,6 @@ module vdp18_core #(
     .mode_i        (mode_i),
     .cd_i          (cd_i),
     .cd_o          (cd_o),
-    .cd_oe_o       (),
     .access_type_i (access_type_s),
     .opmode_o      (opmode_s),
     .vram_we_o     (vram_we_o),

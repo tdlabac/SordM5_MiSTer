@@ -45,18 +45,16 @@ assign  MWR_n  = MRQ_n || WR_n;
 assign  IORD_n  = IORQ_n || RD_n;
 assign  IOWR_n  = IORQ_n || WR_n;
 
-assign  CTC_n   = !(A[7:4] == 4'b000) || IORQ_n;        // 00
-assign  CSR_n   = !(A[7:4] == 4'b001) || IORD_n;        // 10
-assign  CSW_n   = !(A[7:4] == 4'b001) || IOWR_n;        // 10
-assign  SGC_n   = !(A[7:4] == 4'b010) || IORQ_n;        // 20
+assign  CTC_n   = !(A[7:4] == 4'b0000) || IORQ_n;                // 00
+assign  CSR_n   = !(A[7:4] == 4'b0001) || IORD_n;                // 10
+assign  CSW_n   = !(A[7:4] == 4'b0001) || IOWR_n;                // 10
+assign  SGC_n   = !(A[7:4] == 4'b0010) || IORQ_n;                // 20
+assign  KB_n    = !(A[7:4] == 4'b0011) || IORQ_n || RD_n;        // 30
+assign  STS_n   = !(A[7:4] == 4'b0101) || IORQ_n || RD_n;        // 50
 
-
-
-assign  KB_n    = '1;
 assign  EXIOA_n = '1;
 assign  EXIOB_n = '1;
 assign  PDT_n   = '1;
-assign  STS_n   = '1;
 assign  PSTB_n  = '1;
 assign  PCOM_n  = '1;
 

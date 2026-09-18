@@ -77,25 +77,9 @@ TV80a #(.Mode(0), .R800_MULU(0), .IOWait(1)) Z80
    .DO(DO)
 );
 
-logic AREA_ROM, AREA_RAM, AREA_ROM_CART;
-
-assign AREA_ROM      = (A[15:13] == 3'b000  && !MREQ_n) ? 1:0;
-assign AREA_ROM_CART = (A[15:13] == 3'b001  && !MREQ_n) ? 1:0;
-assign AREA_RAM      = (A[15:12] == 4'b0111 && !MREQ_n) ? 1:0;
-
-//IORQ
-logic IORQ_IO, AREA_TMS, AREA_KB, AREA_CAS, AREA_CTC, AREA_PSG;
-assign IORQ_IO       =  !IORQ_n && M1_n;
-
-assign AREA_TMS      = (IORQ_IO && A[7:4] == 4'b0001);
-assign AREA_KB       = (IORQ_IO && A[7:4] == 4'b0011);
-assign AREA_CAS      = (IORQ_IO && A[7:4] == 4'b0101);
-assign AREA_PSG      = (IORQ_IO && A[7:0] == 8'b00100000);
-
-
 logic [7:0] DATA_CTC;
 
-assign DI = DATA_CTC & DATA_ROM & DATA_RAM & DATA_ROM_CART & (AREA_TMS ? DATA_TMS : 8'hFF);
+assign DI = DATA_CTC & DATA_ROM & DATA_RAM & DATA_ROM_CART & DATA_KB & DATA_TMS;
 
 // Z80 CTC — porty 0x00-0x0F, kanál vybírá A[1:0] (0x04-0x0F se zrcadlí).
 //
@@ -141,7 +125,10 @@ ga015 ga015_i
    .ROM0_n(CE_ROM0_n),
    .ROM1_n(CE_ROM1_n),
    .RAM0_n(CE_RAM0_n),
-   .RAM1_n(CE_RAM1_n)
+   .RAM1_n(CE_RAM1_n),
+   .CSR_n(CE_VDP_RD_n),
+   .CSW_n(CE_VDP_WR_n),
+   .KB_n(CE_KB_n)
 );
 
 logic vram_we;
@@ -154,8 +141,8 @@ vdp18_core #(.compat_rgb_g(0)) tms_i
     .clk_i(clk_sys),
     .clk_en_10m7_i(ce_10m7_p),
     .reset_n_i(!reset),
-    .csr_n_i(!(AREA_TMS && !RD_n)),
-    .csw_n_i(!(AREA_TMS && !WR_n)),
+    .csr_n_i(CE_VDP_RD_n),
+    .csw_n_i(CE_VDP_WR_n),
     .mode_i(A[0]),
     .cd_i(DO),
     .cd_o(DATA_TMS),
@@ -229,6 +216,3 @@ spram #(.addr_width(13),.mem_name("ROM_CART")) rom_cart
 );
 
 endmodule
-
-
-

@@ -53,7 +53,6 @@ module vdp18_cpuio (
   input  logic        mode_i,
   input  logic [7:0]  cd_i,
   output logic [7:0]  cd_o,
-  output logic        cd_oe_o,
   input  access_t     access_type_i,
   output opmode_t     opmode_o,
   output logic        vram_we_o,
@@ -358,8 +357,7 @@ module vdp18_cpuio (
   assign status_reg_s = {!int_n_q, sprite_5th_q, sprite_coll_q, sprite_5th_num_q};
   assign vram_a_o = addr_q;
   assign vram_d_o = buffer_q;
-  assign cd_o = (read_mux_s == RDMUX_READAHEAD) ? buffer_q : status_reg_s;
-  assign cd_oe_o = rd_i ? 1'b1 : 1'b0;
+  assign cd_o = rd_i ? ((read_mux_s == RDMUX_READAHEAD) ? buffer_q : status_reg_s) : 8'hFF;
   assign reg_ev_o = ctrl_reg_q[0][0];
   assign reg_16k_o = ctrl_reg_q[1][7];
   assign reg_blank_o = !ctrl_reg_q[1][6];
