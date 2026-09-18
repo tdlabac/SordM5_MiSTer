@@ -24,7 +24,7 @@ module SordM5
 (
    input                    clk_sys,
    input                    reset,
-
+   input   [10:0]           ps2_key,
    input                    TMS_border,
    input                    TMS_PAL,
    output                   TMS_interrupt_n,
@@ -110,7 +110,7 @@ ctc ctc_i
    .zc_to     ()
 );
 
-logic CE_CTC_n, CE_ROM0_n, CE_ROM1_n, CE_ROM2_n, CE_RAM0_n, CE_RAM1_n, MRD_n, MWR_n;
+logic CE_CTC_n, CE_ROM0_n, CE_ROM1_n, CE_ROM2_n, CE_RAM0_n, CE_RAM1_n, MRD_n, MWR_n, CE_KB_n, CE_VDP_RD_n, CE_VDP_WR_n;
 ga015 ga015_i
 (
    .A(A),
@@ -163,6 +163,20 @@ vdp18_core #(.compat_rgb_g(0)) tms_i
     .is_pal_i(TMS_PAL),
     .ce_pix(video_ce_pix)
 );
+
+logic [7:0] DATA_KB;
+logic KEY_RST;
+keyboard keyboard_i
+(
+   .clk_i(clk_sys),
+   .ps2_code_i(ps2_key),
+   .addr_i(A[2:0]),
+   .kb_ce_i(!CE_KB_n),
+   .kb_data_o(DATA_KB),
+   .kb_rst_o(KEY_RST)
+);
+
+
 /*verilator tracing_off*/
 // Internal RAM
 logic [7:0] DATA_RAM;

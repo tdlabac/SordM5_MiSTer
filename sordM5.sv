@@ -102,6 +102,7 @@ SordM5 sordm5_i
 (
 	.clk_sys(clk_sys),
 	.reset(reset),
+	.ps2_key(ps2_key),
 	.TMS_border(status[9]),
 	.TMS_interrupt_n(TMS_interrupt_n),
 	.TMS_PAL(status[10]),
