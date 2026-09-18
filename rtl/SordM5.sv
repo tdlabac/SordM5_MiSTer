@@ -95,13 +95,7 @@ assign AREA_PSG      = (IORQ_IO && A[7:0] == 8'b00100000);
 
 logic [7:0] DATA_CTC;
 
-assign DI = DATA_CTC & (
-            RD_n          ? 8'hFF    :
-            AREA_ROM      ? DATA_ROM :
-            AREA_RAM      ? DATA_RAM :
-            AREA_ROM_CART ? DATA_ROM_CART :
-            AREA_TMS      ? DATA_TMS :
-            8'hFF);
+assign DI = DATA_CTC & DATA_ROM & DATA_RAM & DATA_ROM_CART & (AREA_TMS ? DATA_TMS : 8'hFF);
 
 // Z80 CTC — porty 0x00-0x0F, kanál vybírá A[1:0] (0x04-0x0F se zrcadlí).
 //
@@ -132,7 +126,7 @@ ctc ctc_i
    .zc_to     ()
 );
 
-logic CE_CTC_n;
+logic CE_CTC_n, CE_ROM0_n, CE_ROM1_n, CE_ROM2_n, CE_RAM0_n, CE_RAM1_n, MRD_n, MWR_n;
 ga015 ga015_i
 (
    .A(A),
@@ -142,7 +136,12 @@ ga015 ga015_i
    .IORQ_n(IORQ_n),
    .RD_n(RD_n),
    .WR_n(WR_n),
-   .CTC_n(CE_CTC_n)
+   .MRD_n(MRD_n),
+   .MWR_n(MWR_n),
+   .ROM0_n(CE_ROM0_n),
+   .ROM1_n(CE_ROM1_n),
+   .RAM0_n(CE_RAM0_n),
+   .RAM1_n(CE_RAM1_n)
 );
 
 logic vram_we;
@@ -184,9 +183,11 @@ spram #(.addr_width(12),.mem_name("RAM")) ram
 (
    .clock(clk_sys),
    .address(A[11:0]),
-   .wren(AREA_RAM && !WR_n),
+   .wren(!MWR_n),
    .data(DO),
-   .q(DATA_RAM)
+   .q(DATA_RAM),
+   .oe(!MRD_n),
+	.cs(!(CE_RAM0_n && CE_RAM1_n))
 );
 
 // Internal VRAM
@@ -196,7 +197,9 @@ spram #(.addr_width(14),.mem_name("VRAM")) vram
    .address(vram_A),
    .wren(vram_we),
    .data(vram_do),
-   .q(vram_di)
+   .q(vram_di),
+	.cs('1),
+   .oe('1)
 );
 
 // internal ROM
@@ -207,7 +210,9 @@ spram #(.addr_width(13),.mem_name("ROM")) rom
    .address(A[12:0]),
    .wren('0),
    .data('0),
-   .q(DATA_ROM)
+   .q(DATA_ROM),
+	.cs(!CE_ROM0_n),
+   .oe(!MRD_n)
 );
 
 // cartrige ROM
@@ -218,6 +223,12 @@ spram #(.addr_width(13),.mem_name("ROM_CART")) rom_cart
    .address(A[12:0]),
    .wren('0),
    .data('0),
-   .q(DATA_ROM_CART)
+   .q(DATA_ROM_CART),
+	.cs(!CE_ROM1_n),
+   .oe(!MRD_n)
 );
+
 endmodule
+
+
+
