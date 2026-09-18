@@ -31,16 +31,16 @@ module SordM5
    output  [7:0]            video_R,
    output  [7:0]            video_G,
    output  [7:0]            video_B,
-   output                   video_HS,
-   output                   video_VS,
+   output                   video_HS_n,
+   output                   video_VS_n,
    output                   video_hblank,
    output                   video_vblank,
-   output                   video_blank,
+   output                   video_blank_n,
    output                   video_ce_pix
 );
 
 logic ce_3m58_p, ce_3m58_n, ce_10m7_n, ce_10m7_p;
-clock clock(
+clock clock_i(
 	.clk_sys(clk_sys),
 	.reset(reset),
 	.ce_3m58_p(ce_3m58_p),
@@ -145,7 +145,6 @@ ga015 ga015_i
    .CTC_n(CE_CTC_n)
 );
 
-/*verilator tracing_off*/
 logic vram_we;
 logic [7:0] vram_di, vram_do, DATA_TMS;
 logic [13:0] vram_A;
@@ -170,15 +169,15 @@ vdp18_core #(.compat_rgb_g(0)) tms_i
     .rgb_r_o(video_R),
     .rgb_g_o(video_G),
     .rgb_b_o(video_B),
-    .hsync_n_o(video_HS),
-    .vsync_n_o(video_VS),
+    .hsync_n_o(video_HS_n),
+    .vsync_n_o(video_VS_n),
     .hblank_o(video_hblank),
     .vblank_o(video_vblank),
-    .blank_n_o(video_blank),
+    .blank_n_o(video_blank_n),
     .is_pal_i(TMS_PAL),
     .ce_pix(video_ce_pix)
 );
-
+/*verilator tracing_off*/
 // Internal RAM
 logic [7:0] DATA_RAM;
 spram #(.addr_width(12),.mem_name("RAM")) ram

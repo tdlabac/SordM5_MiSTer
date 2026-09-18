@@ -34,7 +34,6 @@ assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;  
 
-assign VGA_SL = 0;
 assign VGA_F1 = 0;
 assign VGA_SCALER  = 0;
 assign VGA_DISABLE = 0;
@@ -73,7 +72,7 @@ wire   [1:0] buttons;
 wire [127:0] status;
 wire  [10:0] ps2_key;
 
-hps_io #(.CONF_STR(CONF_STR)) hps_io
+hps_io #(.CONF_STR(CONF_STR)) hps_io_i
 (
 	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
@@ -85,60 +84,62 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 	.ps2_key(ps2_key)
 );
 
+wire reset = RESET | status[0] | buttons[1];
+
 ///////////////////////   CLOCKS   ///////////////////////////////
 
 wire clk_sys;
-pll pll
+pll pll_i
 (
 	.refclk(CLK_50M),
 	.rst(0),
 	.outclk_0(clk_sys)
 );
 logic [7:0] video_R, video_G, video_B;
-logic       video_HS, video_VS, video_hblank, video_vblank, video_blank, video_ce_pix;
-logic       TMS_interrupt;
-SordM5 SordM5
+logic       video_HS_n, video_VS_n, video_hblank, video_vblank, video_blank_n, video_ce_pix;
+logic       TMS_interrupt_n;
+SordM5 sordm5_i
 (
 	.clk_sys(clk_sys),
-	.reset(RESET),
+	.reset(reset),
 	.TMS_border(status[9]),
-	.TMS_interrupt(TMS_interrupt),
+	.TMS_interrupt_n(TMS_interrupt_n),
 	.TMS_PAL(status[10]),
 	.video_R(video_R),
     .video_G(video_G),
     .video_B(video_B),
-    .video_HS(video_HS),
-    .video_VS(video_VS),
+    .video_HS_n(video_HS_n),
+    .video_VS_n(video_VS_n),
     .video_hblank(video_hblank),
     .video_vblank(video_vblank),
-    .video_blank(video_blank),
+    .video_blank_n(video_blank_n),
 	.video_ce_pix(video_ce_pix)
 );
 
 /////////////////  VIDEO  /////////////////
 logic scandoubler;
-logic [21:0] gamma_bus;
+wire [21:0] gamma_bus;
 
 
 logic      vga_de;
-logic [1:0] ar    = status[2:1];
-logic [2:0] scale = status[5:3];
-logic [2:0] sl    = scale != 0 ? scale - 1'd1 : 3'd0;
+wire  [1:0] ar    = status[2:1];
+wire  [2:0] scale = status[5:3];
+wire  [2:0] sl    = scale != 0 ? scale - 1'd1 : 3'd0;
 
 assign VGA_SL = sl[1:0];
 assign CLK_VIDEO   = clk_sys;
 assign scandoubler = forced_scandoubler || scale != 0;
 
-reg  en216p;
+logic  en216p;
 always_ff @(posedge CLK_VIDEO) begin
 	en216p <= ((HDMI_WIDTH == 1920) && (HDMI_HEIGHT == 1080) && !scandoubler);
 end
 
-video_freak video_freak
+video_freak video_freak_i
 (
 	.*,
 	.VGA_DE_IN(vga_de),
-    .VGA_VS(~video_VS),
+    .VGA_VS(~video_VS_n),
 	.ARX((ar == 0) ? 12'd4 : {10'b0, (ar - 1'd1)}),
 	.ARY((ar == 0) ? 12'd3 : 12'd0),
 	.CROP_SIZE(en216p ? 12'd216 : 12'd0),
@@ -146,7 +147,7 @@ video_freak video_freak
 	.SCALE(status[8:6])
 );
 
-video_mixer #(.GAMMA(1), .LINE_LENGTH(290)) video_mixer
+video_mixer #(.GAMMA(1), .LINE_LENGTH(290)) video_mixer_i
 (
    .CLK_VIDEO(CLK_VIDEO),
    .hq2x(scale==1),
@@ -157,8 +158,8 @@ video_mixer #(.GAMMA(1), .LINE_LENGTH(290)) video_mixer
    .R(video_R),
    .G(video_G),
    .B(video_B),
-   .HSync(~video_HS),
-   .VSync(~video_VS),
+   .HSync(~video_HS_n),
+   .VSync(~video_VS_n),
    .HBlank(video_hblank),
    .VBlank(video_vblank),
 
