@@ -27,7 +27,7 @@ module SordM5
 
    input                    TMS_border,
    input                    TMS_PAL,
-   output                   TMS_interrupt,
+   output                   TMS_interrupt_n,
    output  [7:0]            video_R,
    output  [7:0]            video_G,
    output  [7:0]            video_B,
@@ -52,6 +52,7 @@ clock clock(
 logic [15:0] A;
 logic [7:0] DO, DI;
 logic MREQ_n, RD_n, WR_n, IORQ_n, M1_n;
+logic CTC_int_n;
 TV80a #(.Mode(0), .R800_MULU(0), .IOWait(1)) Z80
 (
    .RESET_n(!reset),
@@ -60,7 +61,7 @@ TV80a #(.Mode(0), .R800_MULU(0), .IOWait(1)) Z80
    .CE_n(ce_3m58_n),
    .CE_p(ce_3m58_p),
    .WAIT_n('1),
-   .INT_n('1),
+   .INT_n(CTC_int_n),
    .NMI_n('1),
    .BUSRQ_n('1),
    .M1_n(M1_n),
@@ -89,15 +90,47 @@ assign IORQ_IO       =  !IORQ_n && M1_n;
 assign AREA_TMS      = (IORQ_IO && A[7:4] == 4'b0001);
 assign AREA_KB       = (IORQ_IO && A[7:4] == 4'b0011);
 assign AREA_CAS      = (IORQ_IO && A[7:4] == 4'b0101);
-assign AREA_CTC      = (IORQ_IO && A[7:4] == 4'b0000);
 assign AREA_PSG      = (IORQ_IO && A[7:0] == 8'b00100000);
 
-assign DI = RD_n          ? 8'hFF    :
+
+logic [7:0] DATA_CTC;
+
+assign DI = DATA_CTC & (
+            RD_n          ? 8'hFF    :
             AREA_ROM      ? DATA_ROM :
             AREA_RAM      ? DATA_RAM :
             AREA_ROM_CART ? DATA_ROM_CART :
             AREA_TMS      ? DATA_TMS :
-            8'hFF;
+            8'hFF);
+
+// Z80 CTC — porty 0x00-0x0F, kanál vybírá A[1:0] (0x04-0x0F se zrcadlí).
+//
+// Zapojení triggerů podle monitor ROM (tabulka na 0x01D7, vektory z 0x0165):
+//   CK0  counter, sestupná hrana, TC=1, int  -> ISR 0x186C = EI;RETI, nevyužito
+//   CK1  timer /256, TC=14, int              -> ~1 kHz tik, trigger nepotřebuje
+//   CK2  counter, náběžná hrana, TC=23, bez int
+//   CK3  counter, sestupná hrana, TC=1, int  -> ISR 0x01DF = IN A,(11), tedy VDP
+// VDP dává int_n_o aktivní v nule, proto kanál 3 na sestupnou hranu.
+// Nevyužité triggery na 0 stejně jako v původním VHDL projektu.
+ctc ctc_i
+(
+   .clk       (clk_sys),
+   .ce_3m58_p (ce_3m58_p),
+   .res_n     (!reset),
+   .en_n      (CE_CTC_n),
+   .dIn       (DO),
+   .dInCpu    (DI),
+   .dOut      (DATA_CTC),
+   .cs        (A[1:0]),
+   .m1_n      (M1_n),
+   .iorq_n    (IORQ_n),
+   .rd_n      (RD_n),
+   .int_n     (CTC_int_n),
+   .iei       (1'b1),
+   .ieo       (),
+   .clk_trg   ({TMS_interrupt_n, 3'b000}),
+   .zc_to     ()
+);
 
 logic CE_CTC_n;
 ga015 ga015_i
@@ -128,7 +161,7 @@ vdp18_core #(.compat_rgb_g(0)) tms_i
     .mode_i(A[0]),
     .cd_i(DO),
     .cd_o(DATA_TMS),
-    .int_n_o(TMS_interrupt),
+    .int_n_o(TMS_interrupt_n),
     .vram_we_o(vram_we),
     .vram_a_o(vram_A),
     .vram_d_o(vram_do),
