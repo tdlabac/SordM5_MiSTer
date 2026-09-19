@@ -56,7 +56,8 @@ assign BUTTONS = 0;
 localparam CONF_STR = {
 	"Sord M5;;",
 	"-;",
-    "O[2:1],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
+    "F1,binROM,Load to ROM;",
+	"O[2:1],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
     "O[5:3],Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
     "O[8:6],Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer,HV-Integer;",
     "O[9],Border,No,Yes;",
@@ -72,6 +73,17 @@ wire   [1:0] buttons;
 wire [127:0] status;
 wire  [10:0] ps2_key;
 
+// ioctl: plneni pameti souborem z menu. Do jadra jde jako jeden port typu
+// sordm5_pkg::ioctl_t; poradi v concatenaci = poradi poli v package.
+wire        ioctl_download;
+wire [15:0] ioctl_index;
+wire        ioctl_wr;
+wire [26:0] ioctl_addr;
+wire  [7:0] ioctl_dout;
+
+sordm5_pkg::ioctl_t ioctl;
+assign ioctl = {ioctl_download, ioctl_index, ioctl_wr, ioctl_addr, ioctl_dout};
+
 hps_io #(.CONF_STR(CONF_STR)) hps_io_i
 (
 	.clk_sys(clk_sys),
@@ -81,10 +93,17 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io_i
 	.forced_scandoubler(forced_scandoubler),
 	.buttons(buttons),
 	.status(status),
-	.ps2_key(ps2_key)
+	.ps2_key(ps2_key),
+
+	.ioctl_download(ioctl_download),
+	.ioctl_index(ioctl_index),
+	.ioctl_wr(ioctl_wr),
+	.ioctl_addr(ioctl_addr),
+	.ioctl_dout(ioctl_dout),
+	.ioctl_wait(1'b0)
 );
 
-wire reset = RESET | status[0] | buttons[1];
+wire reset = RESET | status[0] | buttons[1] | ioctl_download;
 
 ///////////////////////   CLOCKS   ///////////////////////////////
 
@@ -103,6 +122,7 @@ SordM5 sordm5_i
 	.clk_sys(clk_sys),
 	.reset(reset),
 	.ps2_key(ps2_key),
+	.ioctl(ioctl),
 	.TMS_border(status[9]),
 	.TMS_interrupt_n(TMS_interrupt_n),
 	.TMS_PAL(status[10]),

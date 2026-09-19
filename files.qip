@@ -1,3 +1,4 @@
 set_global_assignment -name SDC_FILE sordM5.sdc
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sordm5_pkg.sv
 set_global_assignment -name SYSTEMVERILOG_FILE sordM5.sv
 set_global_assignment -name QIP_FILE rtl/files.qip

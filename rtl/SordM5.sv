@@ -25,6 +25,7 @@ module SordM5
    input                    clk_sys,
    input                    reset,
    input   [10:0]           ps2_key,
+   input   sordm5_pkg::ioctl_t ioctl,     // plnění ROM souborem z menu
    input                    TMS_border,
    input                    TMS_PAL,
    output                   TMS_interrupt_n,
@@ -205,27 +206,27 @@ spram #(.addr_width(14),.mem_name("VRAM")) vram
 
 // internal ROM
 logic [7:0] DATA_ROM;
-spram #(.addr_width(13),.mem_name("ROM")) rom
+// Monitor ROM; ioctl index 0 = boot ROM, kterou MiSTer nahrává sám.
+rom_ioctl #(.addr_width(13),.mem_name("ROM"),.IOCTL_INDEX(0)) rom
 (
    .clock(clk_sys),
+   .ioctl(ioctl),
    .address(A[12:0]),
-   .wren('0),
-   .data('0),
    .q(DATA_ROM),
-	.cs(!CE_ROM0_n),
+   .cs(!CE_ROM0_n),
    .oe(!MRD_n)
 );
 
 // cartrige ROM
 logic [7:0] DATA_ROM_CART;
-spram #(.addr_width(13),.mem_name("ROM_CART")) rom_cart
+// Cartridge ROM; ioctl index 1 = první soubor z menu (F1).
+rom_ioctl #(.addr_width(13),.mem_name("ROM_CART"),.IOCTL_INDEX(1)) rom_cart
 (
    .clock(clk_sys),
+   .ioctl(ioctl),
    .address(A[12:0]),
-   .wren('0),
-   .data('0),
    .q(DATA_ROM_CART),
-	.cs(!CE_ROM1_n),
+   .cs(!CE_ROM1_n),
    .oe(!MRD_n)
 );
 

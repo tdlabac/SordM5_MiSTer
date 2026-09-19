@@ -4,11 +4,13 @@
 // Rozhraní odpovídá VHDL 1:1. Rozdíl je jen jeden: VHDL má u vstupů výchozí
 // hodnoty (data = 0, enable = 1, wren = 0, cs = 1). Verilog v Quartusu 17
 // výchozí hodnoty vstupů nezná, takže nezapojený vstup skončí na 0.
-// U `cs` to znamená, že paměť nic nezapíše a čte samé 1 — nepoužitý `cs`
-// proto zapojit na 1'b1.
+// U `cs` to znamená, že paměť nic nezapíše a čte samé 1, u `oe` čte samé 1.
+// Nepoužité `cs` a `oe` proto zapojit na 1'b1. U dpram navíc `enable_a` /
+// `enable_b`: vedou na clocken altsyncram a nezapojené port zmrazí.
 //
-// `cs` hradluje zápis i výstup: bez něj vrací q samé jedničky, aby se
-// výstupy periferií daly slučovat přes AND.
+// `cs` hradluje zápis, `cs && oe` výstup: mimo ně vrací q samé jedničky, aby
+// se výstupy periferií daly slučovat přes AND. U dpram platí totéž pro každý
+// port zvlášť (cs_a/oe_a, cs_b/oe_b).
 //------------------------------------------------------------
 
 `default_nettype none
@@ -25,7 +27,6 @@ module spram #(
    input  wire                  clock,
    input  wire [addr_width-1:0] address,
    input  wire [data_width-1:0] data,
-   input  wire                  enable,   // ve VHDL taky nezapojený (BYPASS)
    input  wire                  wren,
    output wire [data_width-1:0] q,
    input  wire                  cs,
@@ -75,17 +76,17 @@ module dpram #(
 
    input  wire [addr_width-1:0] address_a,
    input  wire [data_width-1:0] data_a,
-   input  wire                  enable_a,
    input  wire                  wren_a,
    output wire [data_width-1:0] q_a,
    input  wire                  cs_a,
+   input  wire                  oe_a,
 
    input  wire [addr_width-1:0] address_b,
    input  wire [data_width-1:0] data_b,
-   input  wire                  enable_b,
    input  wire                  wren_b,
    output wire [data_width-1:0] q_b,
-   input  wire                  cs_b
+   input  wire                  cs_b,
+   input  wire                  oe_b
 );
 
    dpram_dif #(
@@ -98,16 +99,16 @@ module dpram #(
       .clock     (clock),
       .address_a (address_a),
       .data_a    (data_a),
-      .enable_a  (enable_a),
       .wren_a    (wren_a),
       .q_a       (q_a),
       .cs_a      (cs_a),
+      .oe_a      (oe_a),
       .address_b (address_b),
       .data_b    (data_b),
-      .enable_b  (enable_b),
       .wren_b    (wren_b),
       .q_b       (q_b),
-      .cs_b      (cs_b)
+      .cs_b      (cs_b),
+      .oe_b      (oe_b)
    );
 
 endmodule
@@ -126,24 +127,24 @@ module dpram_dif #(
 
    input  wire [addr_width_a-1:0] address_a,
    input  wire [data_width_a-1:0] data_a,
-   input  wire                    enable_a,
    input  wire                    wren_a,
    output wire [data_width_a-1:0] q_a,
    input  wire                    cs_a,
+   input  wire                    oe_a,
 
    input  wire [addr_width_b-1:0] address_b,
    input  wire [data_width_b-1:0] data_b,
-   input  wire                    enable_b,
    input  wire                    wren_b,
    output wire [data_width_b-1:0] q_b,
-   input  wire                    cs_b
+   input  wire                    cs_b,
+   input  wire                    oe_b
 );
 
    wire [data_width_a-1:0] q0;
    wire [data_width_b-1:0] q1;
 
-   assign q_a = cs_a ? q0 : {data_width_a{1'b1}};
-   assign q_b = cs_b ? q1 : {data_width_b{1'b1}};
+   assign q_a = cs_a && oe_a ? q0 : {data_width_a{1'b1}};
+   assign q_b = cs_b && oe_b ? q1 : {data_width_b{1'b1}};
 
    altsyncram #(
       .address_reg_b                 ("CLOCK1"),
@@ -177,8 +178,6 @@ module dpram_dif #(
       .address_b (address_b),
       .clock0    (clock),
       .clock1    (clock),
-      .clocken0  (enable_a),
-      .clocken1  (enable_b),
       .data_a    (data_a),
       .data_b    (data_b),
       .wren_a    (wren_a & cs_a),
