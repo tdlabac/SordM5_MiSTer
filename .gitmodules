@@ -1,0 +1,3 @@
+[submodule "rtl/SOUND/jt89"]
+	path = rtl/SOUND/jt89
+	url = https://github.com/jotego/jt89.git
