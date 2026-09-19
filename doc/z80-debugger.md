@@ -94,8 +94,8 @@ prvního M1 následující instrukce. Zastavovat se proto bude:
   - `R` ještě není inkrementované;
 - jen když nejde o pokračování prefixu: `ISet == 0 && XY_State == 0`
   (po `CB`/`ED`/`DD`/`FD` se hranice přeskakuje);
-- M1 potvrzení přerušení (`IntCycle`) je hranice. Hlásí se jako
-  „přerušení“ a při krokování jde INT maskovat;
+- M1 potvrzení přerušení (`IntCycle`) a NMI hranice **není** (viz krok 5a),
+  krok do přerušení skončí na první instrukci obsluhy;
 - během HALT je každý M1 hranice.
 
 MREQ/RD/M1 jsou v tu chvíli aktivní (fetch probíhá). To nevadí, paměť jen
@@ -227,6 +227,24 @@ Na PC most na GDB Remote Serial Protocol (Python). Ve FPGA se RSP neřeší.
    `clock.sv`, jehož freeze nezastaví VDP, test shodí v prvním zmrazeném
    taktu. Audit periferií na logiku bez CE tím prošel (CTC, jt89, VDP,
    klávesnice bez vstupu).
-5. Breakpointy, přístup k paměti, registrový prostor, DPI přenos, GUI
-   v simulaci.
+5a. ✅ Breakpointy, krok s maskou INT, přístup do paměti. Rozhraní je
+   `tv80_dbg_pkg::dbg_in_t` / `dbg_out_t` (`rtl/CPU/tv80_dbg_pkg.sv`), ze
+   `SordM5` vede ven jako `dbg_i` / `dbg_o`. Ovládání pulzy `stop`, `run`,
+   `step` (zastavení drží, dokud nepřijde `run`/`step`, i když ho způsobil
+   breakpoint). Rozhodnutí při implementaci:
+   - M1 potvrzení INT/NMI **není** hranice (zastavení uprostřed potvrzení
+     a převzetí sběrnice by rozbilo vektor). Krok do přerušení skončí na
+     první instrukci obsluhy; `step_noint` INT během kroku maskuje.
+   - Přístup debuggeru jen do paměti (I/O ne: periferie s CE by při
+     zmrazení stejně neodpověděly a čtení I/O má vedlejší účinky).
+   - **CTC: detekce RETI vzorkuje jen na `ce_3m58_p`** (jako skutečný
+     Z80-CTC). Na každém taktu clk_sys by při převzetí sběrnice uprostřed
+     fetche `ED` viděla opkód dvakrát a RETI ztratila. Samotest: se starou
+     detekcí `tb_freeze` selže.
+   Testy: `rtl/CPU/tb/run_dbg.sh` (všechny typy BP, podmínka na data,
+   rozsah, fetch není MRD, krok, INT při kroku, čtení/zápis paměti) a
+   `rtl/tb/run_freeze.sh` rozšířený o breakpointy, čtení paměti (kontrola
+   proti ROM a RAM) a zápis přečtené hodnoty zpět; 3 semínka × 6 M taktů,
+   každé ~11 000 zastavení breakpointem a ~45 000 čtení, bez rozdílu.
+5b. Registrový prostor, DPI přenos, ovládání v simulaci.
 6. UART, případně DDR.

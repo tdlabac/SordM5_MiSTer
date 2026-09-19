@@ -16,7 +16,7 @@ DEFS=""
 EXTRA=""
 if [ -n "$DUT_DBG" ]; then
    DEFS="+define+DUT_DBG"
-   EXTRA="$DUT_DIR/tv80_dbg.sv"
+   EXTRA="$DUT_DIR/tv80_dbg_pkg.sv $DUT_DIR/tv80_dbg.sv"
 fi
 
 rm -rf "$OBJ"

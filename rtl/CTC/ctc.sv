@@ -255,11 +255,21 @@ module ctc
 
    // Hledá sekvenci ED 4D ve dvou po sobě jdoucích M1 cyklech. Cyklus int
    // acknowledge se vynechává tím, že se vyžaduje iorq_n v jedničce.
+   //
+   // Vzorkuje se jen na ce_3m58_p (hodiny CPU, jako skutečný Z80-CTC), ne
+   // každý takt clk_sys. Při zmrazení počítače debuggerem (doc/z80-debugger.md)
+   // tak detektor nevidí přístupy debuggeru do paměti: debugger na chvíli
+   // zvedne M1 uprostřed fetche a bez toho by se opkód (třeba ED z RETI)
+   // započetl dvakrát a RETI by se ztratilo. Fetch trvá přes dvě CE_p
+   // (konec T1 a T2), poslední vzorek je opkód na konci T2.
    /* verilator lint_off BLKSEQ */
    always_ff @(posedge clk) begin : findReti
       reti <= 1'b0;
 
-      if (!m1_n && iorq_n && !rd_n) begin
+      if (!ce_3m58_p) begin
+         // mimo CE se nic nemění
+      end
+      else if (!m1_n && iorq_n && !rd_n) begin
          opcode          = dInCpu;
          last_opcodeRead = 1'b1;
       end

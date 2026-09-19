@@ -1,13 +1,16 @@
 // Test zmrazení celého počítače (viz tb_freeze.sv).
 //
-// Instance a: debugger ji náhodně zastavuje na hranici instrukce, drží
-// zastavenou náhodný počet taktů, krokuje po instrukcích a nahrává registry
-// (DIRSet s vlastním REG). Instance b běží bez zásahů a dostává takt jen
-// tehdy, když a nestojí. V každém taktu se porovná video, zvuk, sběrnice CPU
-// a registry, na konci celá RAM a VRAM.
+// Instance a: debugger ji zastavuje příkazem stop i breakpointy (zápis do
+// RAM 7000h-7FFFh, zápis na porty VDP 10h-1Fh, zapínají se náhodně), drží
+// zastavenou náhodný počet taktů, čte paměť převzetím sběrnice (a přečtenou
+// hodnotu RAM občas zapíše zpět), krokuje a nahrává registry (DIRSet s REG).
+// Instance b běží bez zásahů a dostává takt jen tehdy, když a nestojí.
 //
-// Navíc se při každém zastavení kontroluje, že PC v REG = adresa na sběrnici
-// (CPU stojí na začátku fetche) a že DIRSet s REG nic nezmění.
+// V každém taktu se porovná video, zvuk a registry, sběrnice CPU mimo
+// přístupy debuggeru; na konci celá RAM a VRAM. Navíc:
+//   - při zastavení PC v REG = adresa na sběrnici,
+//   - DIRSet s REG nezmění REG,
+//   - čtení debuggerem vrátí obsah ROM (rom.hex) a RAM (z instance b).
 //
 // Prostředí: FZ_CLOCKS (takty instance a, výchozí 6 000 000),
 //            FZ_SEED (semínko, výchozí 1), FZ_NOSTOP=1 (bez zastavování).
@@ -15,7 +18,6 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
-#include <cstring>
 #include <random>
 
 static Vtb_freeze* t;
@@ -37,63 +39,115 @@ static void tick(bool b_too) {
    t->clk_a = 0; t->clk_b = 0; t->eval();
 }
 
+static uint8_t rom[8192];
+static void load_rom() {
+   FILE* f = fopen("rom.hex", "r");
+   for (int i = 0; f && i < 8192; i++) { unsigned v; if (fscanf(f, "%x", &v) == 1) rom[i] = v; }
+   if (f) fclose(f);
+}
+
 int main(int argc, char** argv) {
    Verilated::commandArgs(argc, argv);
    t = new Vtb_freeze;
+   load_rom();
    const long clocks = env("FZ_CLOCKS", 6000000);
    const bool nostop = env("FZ_NOSTOP", 0);
    std::mt19937 rng((uint32_t)env("FZ_SEED", 1));
    auto chance = [&](int n) { return (int)(rng() % (uint32_t)n) == 0; };
 
    t->clk_a = 0; t->clk_b = 0; t->eval();
-   t->reset = 1; t->dbg_stop = 0; t->dbg_step = 0; t->dbg_dirset = 0;
+   t->reset = 1;
    for (int i = 0; i < 20; i++) tick(true);
    t->reset = 0;
 
-   long common = 0, frozen = 0, stops = 0, steps = 0, dirsets = 0, pc_bad = 0, dirset_bad = 0;
+   long common = 0, frozen = 0, stops = 0, bp_stops = 0, steps = 0, dirsets = 0;
+   long reads = 0, writes = 0, read_bad = 0, pc_bad = 0, dirset_bad = 0;
    long vsyncs = 0, intas = 0; int prev_vs = 1; bool prev_inta = false;
-   uint32_t pcs_seen = 0;
 
    // stav řízení debuggeru
-   enum { RUN, WANT_STOP, HOLD, STEP_WAIT } st = RUN;
-   int hold = 0, steps_left = 0;
-   bool did_dirset = false;
+   enum { RUN, WAIT_STOP, HOLD, MEM_WAIT } st = RUN;
+   int hold = 0, steps_left = 0, reads_left = 0, mem_wait = 0;
+   bool did_dirset = false, bp_on[2] = {false, false};
+   uint16_t m_addr = 0; bool m_we = false;
+   bool busy_d = false;
+
+   auto set_bp = [&](int i, int kind, uint16_t addr, uint16_t amask) {
+      t->bp_we = 1; t->bp_sel = i; t->bp_kind = kind; t->bp_addr = addr; t->bp_amask = amask;
+   };
 
    for (long i = 0; i < clocks; i++) {
       // --- řízení debuggeru (vstupy před hranou)
-      t->dbg_step = 0; t->dbg_dirset = 0;
+      t->c_stop = t->c_run = t->c_step = t->c_dirset = t->c_mem_req = 0;
+      t->bp_we = 0;
+      if (!nostop && i % 100000 == 50000) {                   // breakpointy náhodně zap/vyp
+         int k = rng() % 2; bp_on[k] = !bp_on[k];
+         if (k == 0) set_bp(0, bp_on[0] ? 4 : 0, 0x7000, 0xF000);   // MWR 7000h-7FFFh
+         else        set_bp(1, bp_on[1] ? 16 : 0, 0x0010, 0x00F0); // IOWR porty 10h-1Fh
+      }
       switch (st) {
       case RUN:
-         if (!nostop && chance(20000)) { t->dbg_stop = 1; st = WANT_STOP; }
+         if (!nostop && chance(20000)) { t->c_stop = 1; }
+         if (t->a_stopped) st = WAIT_STOP;                     // zastavil breakpoint
+         else if (t->c_stop) st = WAIT_STOP;
          break;
-      case WANT_STOP:
-      case STEP_WAIT:
+      case WAIT_STOP:
          if (t->a_stopped) {
-            stops += (st == WANT_STOP); steps += (st == STEP_WAIT);
-            // při zastavení: PC = adresa na sběrnici
+            int why = t->a_reason;
+            if (why == 2) steps++; else if (why >= 3) bp_stops++; else stops++;
             if (getb(t->a_reg, 64, 16) != t->a_addr) pc_bad++;
-            pcs_seen++;
-            if (st == WANT_STOP) steps_left = chance(3) ? 1 + rng() % 6 : 0;
-            hold = rng() % 40; did_dirset = false;
+            if (why != 2) steps_left = chance(3) ? 1 + rng() % 6 : 0;
+            hold = rng() % 40; reads_left = rng() % 6; did_dirset = false;
             st = HOLD;
          }
          break;
       case HOLD:
-         if (!did_dirset && chance(4)) {
-            t->dbg_dir = t->a_reg; t->dbg_dirset = 1; did_dirset = true; dirsets++;
+         if (reads_left > 0) {
+            reads_left--;
+            m_we = false;
+            m_addr = chance(2) ? (uint16_t)(0x7000 + rng() % 0x1000) : (uint16_t)rng();
+            t->c_mem_req = 1; t->c_mem_we = 0; t->c_mem_addr = m_addr;
+            mem_wait = 2; st = MEM_WAIT; reads++;
+         } else if (!did_dirset && chance(4)) {
+            t->c_dir = t->a_reg; t->c_dirset = 1; did_dirset = true; dirsets++;
          } else if (hold > 0) {
             hold--;
          } else if (steps_left > 0) {
-            steps_left--; t->dbg_step = 1; st = STEP_WAIT;
+            steps_left--; t->c_step = 1; st = WAIT_STOP;
          } else {
-            t->dbg_stop = 0; st = RUN;
+            t->c_run = 1; st = RUN;
          }
+         break;
+      case MEM_WAIT:
+         if (mem_wait > 0) { mem_wait--; break; }
+         if (t->a_busy) break;
+         if (!m_we) {
+            // kontrola přečtené hodnoty: ROM z rom.hex, RAM z instance b
+            uint8_t got = t->a_rdata;
+            int want = -1;
+            if (m_addr < 0x2000) want = rom[m_addr];
+            if (m_addr >= 0x7000 && m_addr < 0x8000) {   // RAM; 8000h+ nic nečte (FF)
+               t->peek_a = m_addr & 0x0FFF; t->eval(); want = t->b_ram;
+            }
+            if (want >= 0 && got != want) {
+               if (read_bad < 8) printf("  čtení %04X: %02X, čekáno %02X\n", m_addr, got, want);
+               read_bad++;
+            }
+            if (m_addr >= 0x7000 && m_addr < 0x8000) {
+               if (chance(2)) {                                // zápis stejné hodnoty zpět
+                  m_we = true;
+                  t->c_mem_req = 1; t->c_mem_we = 1; t->c_mem_addr = m_addr; t->c_mem_wdata = got;
+                  mem_wait = 2; writes++;
+                  break;
+               }
+            }
+         }
+         st = HOLD;
          break;
       }
 
       bool b_too = !t->a_stopped;          // freeze a platí pro tuto hranu
       VlWide<7> reg_before; for (int k = 0; k < 7; k++) reg_before[k] = t->a_reg[k];
-      bool was_dirset = t->dbg_dirset;
+      bool was_dirset = t->c_dirset;
       tick(b_too);
       if (b_too) common++; else frozen++;
 
@@ -106,13 +160,16 @@ int main(int argc, char** argv) {
       if (!vs && prev_vs) vsyncs++;
       prev_vs = vs;
 
-      // --- porovnání a proti b
+      // --- porovnání a proti b (sběrnice ne během přístupu debuggeru)
+      bool bus_cmp = !t->a_busy && !busy_d;
+      busy_d = t->a_busy;
       bool diff = t->a_rgb != t->b_rgb || t->a_sync != t->b_sync || t->a_audio != t->b_audio ||
-                  t->a_addr != t->b_addr || t->a_do != t->b_do || t->a_di != t->b_di ||
-                  t->a_ctl != t->b_ctl || !reg_eq(t->a_reg, t->b_reg);
+                  !reg_eq(t->a_reg, t->b_reg) ||
+                  (bus_cmp && (t->a_addr != t->b_addr || t->a_do != t->b_do || t->a_di != t->b_di ||
+                               t->a_ctl != t->b_ctl));
       if (diff) {
-         printf("\nROZDIL v taktu a %ld (společných %ld, zmrazených %ld, a %s)\n",
-                i, common, frozen, t->a_stopped ? "stojí" : "běží");
+         printf("\nROZDIL v taktu a %ld (společných %ld, zmrazených %ld, a %s, busy %d)\n",
+                i, common, frozen, t->a_stopped ? "stojí" : "běží", t->a_busy);
          printf("  rgb %06X/%06X sync %02X/%02X audio %04X/%04X\n", t->a_rgb, t->b_rgb,
                 t->a_sync, t->b_sync, t->a_audio, t->b_audio);
          printf("  A %04X/%04X DO %02X/%02X DI %02X/%02X ctl %02X/%02X reg %s\n", t->a_addr, t->b_addr,
@@ -135,15 +192,17 @@ int main(int argc, char** argv) {
 
    int fails = 0;
    printf("Taktů a %ld: společných %ld, zmrazených %ld; snímků (VSYNC) %ld\n", clocks, common, frozen, vsyncs);
-   printf("Zastavení %ld, kroků %ld, DIRSet %ld; přerušení %ld, nenulových bajtů VRAM %d\n",
-          stops, steps, dirsets, intas, vram_used);
+   printf("Zastavení: stop %ld, breakpoint %ld, kroků %ld; DIRSet %ld; čtení %ld, zápisů zpět %ld\n",
+          stops, bp_stops, steps, dirsets, reads, writes);
+   printf("Přerušení %ld, nenulových bajtů VRAM %d\n", intas, vram_used);
    printf("  %-52s %s (%ld)\n", "PC v REG = adresa na sběrnici při zastavení", pc_bad ? "CHYBA" : "OK", pc_bad);   fails += pc_bad != 0;
    printf("  %-52s %s (%ld)\n", "DIRSet s REG nezmění REG", dirset_bad ? "CHYBA" : "OK", dirset_bad);           fails += dirset_bad != 0;
+   printf("  %-52s %s (%ld)\n", "čtení debuggerem = obsah ROM a RAM", read_bad ? "CHYBA" : "OK", read_bad);      fails += read_bad != 0;
    printf("  %-52s %s (%d)\n",  "RAM a VRAM na konci shodné", mem_bad ? "CHYBA" : "OK", mem_bad);                 fails += mem_bad != 0;
-   bool enough = nostop || (stops > 20 && steps > 20 && dirsets > 10);
    bool alive = intas > 2 && vram_used > 100;
-   printf("  %-52s %s\n", "počítač běží (přerušení, zápisy do VRAM)", alive ? "OK" : "CHYBA");                 fails += !alive;
-   printf("  %-52s %s\n", "dost zastavení, kroků a DIRSet", enough ? "OK" : "CHYBA");                            fails += !enough;
+   printf("  %-52s %s\n", "počítač běží (přerušení, zápisy do VRAM)", alive ? "OK" : "CHYBA");                   fails += !alive;
+   bool enough = nostop || (stops > 20 && bp_stops > 20 && steps > 20 && dirsets > 10 && reads > 50 && writes > 10);
+   printf("  %-52s %s\n", "dost zastavení, breakpointů, kroků, DIRSet, přístupů", enough ? "OK" : "CHYBA");       fails += !enough;
    printf("  %-52s %s\n", "video, zvuk, sběrnice, registry v každém taktu", "OK");
 
    printf("\n%s (%d chyb)\n", fails ? "NEPROSLO" : "VSE PROSLO", fails);

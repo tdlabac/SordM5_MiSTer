@@ -42,12 +42,8 @@ module SordM5 #(
    output  signed [15:0]    audio,
 
    // debugger (jen DEBUG = 1), viz rtl/CPU/tv80_dbg.sv
-   input                    dbg_stop,
-   input                    dbg_step,
-   input                    dbg_dirset,
-   input   [211:0]          dbg_dir,
-   output                   dbg_stopped,
-   output  [211:0]          dbg_reg
+   input   tv80_dbg_pkg::dbg_in_t  dbg_i,
+   output  tv80_dbg_pkg::dbg_out_t dbg_o
 );
 
 logic ce_3m58_p, ce_3m58_n, ce_10m7_n, ce_10m7_p;
@@ -90,12 +86,8 @@ tv80_dbg #(.Mode(0), .R800_MULU(0), .IOWait(1), .DEBUG(DEBUG)) Z80
    .DI(DI),
    .DO(DO),
    .freeze(freeze),
-   .dbg_stop(dbg_stop),
-   .dbg_step(dbg_step),
-   .dbg_dirset(dbg_dirset),
-   .dbg_dir(dbg_dir),
-   .dbg_stopped(dbg_stopped),
-   .dbg_reg(dbg_reg)
+   .dbg_i(dbg_i),
+   .dbg_o(dbg_o)
 );
 
 logic [7:0] DATA_CTC;

@@ -67,8 +67,7 @@ module tb_lockstep (
       , .REG(d_reg), .DIRSet(dirset), .DIR(dir), .DbgMCycle(d_mc), .DbgTState(d_ts),
       .DbgPrefix(d_prefix), .DbgIntCycle(), .DbgNMICycle()
 `else
-      , .freeze(), .dbg_stop(1'b0), .dbg_step(1'b0), .dbg_dirset(1'b0), .dbg_dir('0),
-      .dbg_stopped(), .dbg_reg()
+      , .freeze(), .dbg_i('0), .dbg_o()
 `endif
    );
 `ifdef DUT_DBG

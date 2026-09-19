@@ -22,12 +22,12 @@ od -An -v -tx1 -w1 "$CART" | tr -d ' ' > "$OBJ/cart.hex"
 verilator -cc --exe --build -O3 -Wno-fatal -Wno-lint -Wno-MULTIDRIVEN -Wno-PINMISSING \
    --x-assign fast --x-initial fast --Mdir "$OBJ" -o tb --top-module tb_freeze \
    -I$R/VDP \
-   $R/sordm5_pkg.sv \
+   $R/sordm5_pkg.sv $R/CPU/tv80_dbg_pkg.sv \
    $R/CPU/tv80_alu.sv $R/CPU/tv80.sv $R/CPU/tv80_mcode.sv $R/CPU/tv80_reg.sv $R/CPU/tv80a.sv $R/CPU/tv80_dbg.sv \
    $R/VDP/vdp18_pack-p.sv $R/VDP/vdp18_col_pack-p.sv $R/VDP/vdp18_core.sv $R/VDP/vdp18_clk_gen.sv \
    $R/VDP/vdp18_hor_vert.sv $R/VDP/vdp18_ctrl.sv $R/VDP/vdp18_cpuio.sv $R/VDP/vdp18_addr_mux.sv \
    $R/VDP/vdp18_pattern.sv $R/VDP/vdp18_sprite.sv $R/VDP/vdp18_col_mux.sv \
-   $R/CTC/ctc_channel.sv $R/CTC/ctc.sv \
+   $R/CTC/ctc_channel.sv "${CTC:-$R/CTC/ctc.sv}" \
    $R/SOUND/jt89/hdl/jt89.v $R/SOUND/jt89/hdl/jt89_tone.v $R/SOUND/jt89/hdl/jt89_noise.v \
    $R/SOUND/jt89/hdl/jt89_vol.v $R/SOUND/jt89/hdl/jt89_mixer.v \
    $R/SordM5.sv $R/rom_ioctl.sv "$CLOCK" $R/GA015/ga015.sv $R/KEYBOARD/keyboard.sv $R/EXT/ext_bus.sv \

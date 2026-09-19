@@ -1,23 +1,36 @@
-// Test zmrazení celého počítače (doc/z80-debugger.md, krok 4).
+// Test zmrazení celého počítače (doc/z80-debugger.md, kroky 4 a 5).
 //
 // Dvě instance celého SordM5 (DEBUG = 1), každá má vlastní hodiny:
-//   a  debugger ji zastavuje, krokuje a nahrává registry (DIRSet s REG),
+//   a  debugger ji zastavuje (příkaz stop i breakpointy), krokuje, nahrává
+//      registry (DIRSet s REG) a za zastavení čte paměť převzetím sběrnice,
 //   b  běží bez zásahů.
 // C++ dává hodiny b jen v taktech, kdy a nestojí (freeze = 0). Když zmrazení
-// nic nemění, musí být obě instance v každém taktu stejné: video, zvuk,
-// sběrnice CPU i registry. Na konci se porovná celá RAM a VRAM.
+// ani přístupy debuggeru nic nemění, musí být obě instance v každém taktu
+// stejné: video, zvuk, sběrnice CPU (mimo přístupy debuggeru) i registry.
+// Na konci se porovná celá RAM a VRAM.
 
-module tb_freeze (
+module tb_freeze
+   import tv80_dbg_pkg::*;
+(
    input  logic         clk_a,
    input  logic         clk_b,
    input  logic         reset,
 
-   // debugger instance a
-   input  logic         dbg_stop,
-   input  logic         dbg_step,
-   input  logic         dbg_dirset,
-   input  logic [211:0] dbg_dir,
+   // příkazy debuggeru instance a
+   input  logic         c_stop, c_run, c_step, c_dirset,
+   input  logic [211:0] c_dir,
+   input  logic         c_mem_req, c_mem_we,
+   input  logic [15:0]  c_mem_addr,
+   input  logic [7:0]   c_mem_wdata,
+   input  logic         bp_we,
+   input  logic [3:0]   bp_sel,
+   input  logic [4:0]   bp_kind,
+   input  logic [15:0]  bp_addr, bp_amask,
+
    output logic         a_stopped,
+   output logic [2:0]   a_reason,
+   output logic         a_busy,
+   output logic [7:0]   a_rdata,
    output logic [211:0] a_reg,
    output logic [211:0] b_reg,
 
@@ -37,17 +50,34 @@ module tb_freeze (
    sordm5_pkg::ioctl_t ioctl_idle;
    assign ioctl_idle = '0;
 
-`define M5_INST(name, clk, stop, step, dirset, dir, stopped, regout) \
+   bp_t bps [NBP];
+   always_ff @(posedge clk_a)
+      if (bp_we) bps[bp_sel] <= '{kind: bp_kind, addr: bp_addr, amask: bp_amask, data: 8'h00, dmask: 8'h00};
+
+   dbg_in_t  a_i;
+   dbg_out_t a_o, b_o;
+   always_comb begin
+      a_i = '0;
+      a_i.stop = c_stop; a_i.run = c_run; a_i.step = c_step;
+      a_i.dirset = c_dirset; a_i.dir = c_dir;
+      a_i.mem_req = c_mem_req; a_i.mem_we = c_mem_we; a_i.mem_addr = c_mem_addr; a_i.mem_wdata = c_mem_wdata;
+      for (int i = 0; i < NBP; i++) a_i.bp[i] = bps[i];
+   end
+
+`define M5_INST(name, clk, din, dout) \
    SordM5 #(.DEBUG(1)) name ( \
       .clk_sys(clk), .reset(reset), .ps2_key(11'd0), .ioctl(ioctl_idle), \
       .TMS_border(1'b0), .TMS_PAL(1'b0), .TMS_interrupt_n(), \
       .video_R(), .video_G(), .video_B(), .video_HS_n(), .video_VS_n(), \
       .video_hblank(), .video_vblank(), .video_blank_n(), .video_ce_pix(), .audio(), \
-      .dbg_stop(stop), .dbg_step(step), .dbg_dirset(dirset), .dbg_dir(dir), \
-      .dbg_stopped(stopped), .dbg_reg(regout));
+      .dbg_i(din), .dbg_o(dout));
 
-   `M5_INST(a, clk_a, dbg_stop, dbg_step, dbg_dirset, dbg_dir, a_stopped, a_reg)
-   `M5_INST(b, clk_b, 1'b0, 1'b0, 1'b0, '0, , b_reg)
+   `M5_INST(a, clk_a, a_i, a_o)
+   `M5_INST(b, clk_b, '0, b_o)
+
+   assign a_stopped = a_o.stopped;  assign a_reason = a_o.reason;
+   assign a_busy    = a_o.mem_busy; assign a_rdata  = a_o.mem_rdata;
+   assign a_reg     = a_o.regs;     assign b_reg    = b_o.regs;
 
    assign a_rgb   = {a.video_R, a.video_G, a.video_B};
    assign b_rgb   = {b.video_R, b.video_G, b.video_B};

@@ -79,12 +79,14 @@ static uint8_t int_ack() {
     return sampled;
 }
 
+// Fetch opkodu jako u TV80: RD drzi od CE_n v T1 do CE_n v T3, tedy pres
+// dve CE_p (12 taktu clk_sys). RETI se vzorkuje jen na CE_p.
 static void m1_fetch(uint8_t op) {
     dut->dInCpu = op;
     dut->m1_n = 0; dut->iorq_n = 1; dut->rd_n = 0;
-    ticks(2);
+    ticks(12);
     bus_idle();
-    ticks(2);
+    ticks(6);
 }
 
 static void do_reti() { m1_fetch(0xED); m1_fetch(0x4D); }
