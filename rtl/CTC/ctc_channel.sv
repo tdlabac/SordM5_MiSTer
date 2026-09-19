@@ -88,6 +88,12 @@ module ctc_channel
    // Zápis se provede jednou, na náběžné hraně výběru. Původní VHDL ho nechávalo
    // platit po celou dobu, co byl kanál vybraný, a stav překlápělo až po jeho
    // uvolnění — to fungovalo jen díky mezerám mezi OUT instrukcemi.
+   //
+   // Z8430 nemá vývod WR: zápis je „vybraný (IORQ, CE) a RD neaktivní“.
+   // Předpokládá, že Z80 při IN aktivuje IORQ a RD současně (náběžná hrana
+   // T2). TV80a to dřív nedělal (RD o půl taktu později), takže každé
+   // IN A,(CTC) zapsalo do kanálu DO; opraveno v rtl/CPU/tv80a.sv, hlídá
+   // rtl/CPU/tb (bod 6).
    wire wr_sel   = sel & rd_n;
    wire wr_pulse = wr_sel & ~wr_sel_d;
 

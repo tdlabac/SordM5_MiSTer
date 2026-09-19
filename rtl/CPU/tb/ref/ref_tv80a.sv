@@ -1,5 +1,7 @@
 // ZMRAŽENÁ REFERENČNÍ KOPIE rtl/CPU/tv80a.sv — needitovat, generuje make_ref.sh
 // Zdroj: pracovní strom 2026-09-19
+// + 2026-09-19 vědomě přijato: I/O cyklus, RD/WR spolu s IORQ (stejná
+//   úprava jako rtl/CPU/tv80a.sv, io_hold; hlídá rtl/CPU/tb/run_tb.sh bod 6)
 //
 // Z80 compatible microprocessor core, asynchronous top level
 //
@@ -126,8 +128,9 @@ module REF_TV80a#(
     // M1 rises; for that window the bus looks like an I/O write (IORQ=0,
     // M1=1, RD=1) to Z80 peripherals without a WR pin (CTC, PIO, SIO).
     assign IORQ_n  = IORQ_n_i || (IReq_Inhibit && IntCycle_n) || (~IntCycle_n && M1_n);
-    assign RD_n    = RD_n_i;
-    assign WR_n    = WR_n_j;
+    wire   io_hold = ~IORQ_n_i && IReq_Inhibit && IntCycle_n;
+    assign RD_n    = RD_n_i || io_hold;
+    assign WR_n    = WR_n_j || io_hold;
     assign RFSH_n  = RFSH_n_i;
     assign A       = A_i;
 
@@ -197,7 +200,7 @@ module REF_TV80a#(
                 endcase
             end else begin
                 case (TState)
-                    3'd1: if (~IORQ_n_i) WR_n_i <= ~Write;
+                    3'd1: WR_n_i <= ~Write;
                     3'd3: WR_n_i <= '1;
                     default: ;
                 endcase
@@ -251,11 +254,7 @@ module REF_TV80a#(
                 if (TState == 3'd1 && ~NoRead) begin
                     IORQ_n_i <= ~IORQ;
                     MREQ <= ~IORQ;
-                    if (~IORQ) begin
-                        RD <= ~Write;
-                    end else if (~IORQ_n_i) begin
-                        RD <= ~Write;
-                    end
+                    RD <= ~Write;
                 end
                 if (TState == 3'd3) begin
                     RD <= '0;

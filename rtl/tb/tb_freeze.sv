@@ -71,6 +71,7 @@ module tb_freeze
       .vdp_border(1'b0), .vdp_pal(1'b0), \
       .video_r(), .video_g(), .video_b(), .video_hs_n(), .video_vs_n(), \
       .video_hblank(), .video_vblank(), .video_ce_pix(), .audio(), \
+      .ce_cpu(), .cas_in(1'b0), .cas_motor(), \
       .dbg_i(din), .dbg_o(dout), .tstamp(ts));
 
    `M5_INST(a, clk_a, a_i, a_o, a_ts)

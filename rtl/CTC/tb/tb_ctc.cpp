@@ -3,6 +3,7 @@
 #include <verilated.h>
 #include <cstdio>
 #include <cstdint>
+#include <cstdlib>
 
 static Vctc*   dut;
 static int     ce_cnt = 0;
@@ -394,6 +395,38 @@ int main(int argc, char** argv) {
     long t22 = wait_int(400);
     check("22. konec potvrzeni neprogramuje kanal (dalsi preruseni prijde)", got_int(t22));
     tail_cs = 0; tail_data = 0x00;
+
+    // ---------------------------------------------------------------- 23
+    // IN z kanalu jako Z80 (IORQ a RD soucasne), na DO zbytek (FFh = ridici
+    // slovo s resetem kanalu a konstantou). Cteni nesmi nic zapsat: citac
+    // bezi dal a dalsi OUT je zase ridici slovo. Monitor M5 takhle meri
+    // delku bitu pri cteni kazety (RDCNT, IN A,(1)). CTC nema vyvod WR, cteni
+    // pozna jen podle RD, proto musi TV80 dat IORQ a RD soucasne
+    // (rtl/CPU/tb, bod 6); s RD o pul taktu pozdeji tenhle test selze.
+    hw_reset();
+    io_write(1, 0x07);                    // timer /16, reset, TC follows
+    io_write(1, 0x00);                    // TC 256
+    ticks(6 * 16 * 3);
+    bool mono = true;
+    uint8_t prev = 0;
+    const bool rd_late = getenv("TB_RD_LATE") != nullptr;
+    for (int k = 0; k < 6; k++) {
+        dut->cs = 1; dut->dIn = 0xFF;
+        dut->en_n = 0; dut->iorq_n = 0; dut->m1_n = 1;
+        dut->rd_n = rd_late ? 1 : 0;
+        if (rd_late) { tick(); dut->rd_n = 0; }   // TB_RD_LATE: RD o takt pozdeji (stary TV80a)
+        ticks(2);
+        uint8_t v = dut->dOut;
+        bus_idle(); ticks(6 * 16 * 2);    // 2 kroky citace
+        if (k > 0 && !(v < prev)) mono = false;
+        prev = v;
+    }
+    io_write(1, 0x07);                    // ridici slovo (ne konstanta)
+    io_write(1, 0x00);
+    ticks(6 * 16 * 3);
+    uint8_t v23 = io_read(1);
+    char d23[64]; snprintf(d23, sizeof d23, "(posledni %02X, po restartu %02X)", prev, v23);
+    check("23. IN (IORQ+RD, FFh na DO) kanal neprogramuje", mono && prev < 0xF8 && v23 >= 0xF8, d23);
 
     printf("\n%s (%d chyb)\n", fails ? "NEPROSLO" : "VSE PROSLO", fails);
     delete dut;

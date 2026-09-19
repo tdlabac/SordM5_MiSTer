@@ -104,6 +104,9 @@ static void run_mode(const Mode& m) {
     int  last_in = -1, out11 = 0, out11_bad = 0, ins = 0;
     bool io_write_seen = false, io_read_seen = false; uint8_t io_port = 0, io_data = 0;
 
+    // 6. začátek I/O cyklu
+    long io_start = -1; int io_lead = 0, io_kind = 0, in_lead = 0, out_lead = 0;
+
     for (long i = 0; i < 200000; i++) {
         // řadič přerušení: zvedne INT, drží do potvrzení
         if (ints_raised < N_INT && t->int_n && clk >= next_int) {
@@ -165,6 +168,29 @@ static void run_mode(const Mode& m) {
         }
         p_fetch = fetch;
 
+        // --- 6. začátek I/O cyklu: IORQ spadne spolu s RD (IN) / WR (OUT)
+        // Z80: obojí na náběžné hraně T2. Periferie Zilogu bez vývodu WR (CTC,
+        // PIO, SIO) berou „IORQ a RD neaktivní“ jako zápis.
+        if (!m1 && iorq && !p_iorq) { io_start = clk; io_lead = 0; io_kind = 0; }
+        if (!m1 && iorq && io_start >= 0) {
+            if (!rd && !wr && io_kind == 0) io_lead++;      // IORQ bez RD i WR
+            if (rd && io_kind == 0) { io_kind = 1; if (io_lead > in_lead) in_lead = io_lead; }
+            if (wr && io_kind == 0) { io_kind = 2; if (io_lead > out_lead) out_lead = io_lead; }
+        }
+        // TB_IOWAVE=1: průběh prvních I/O cyklů od začátku M3 (ladění)
+        static const bool iowave = getenv("TB_IOWAVE") != nullptr;
+        static int iowave_left = 0, p_mc = 0;
+        if (iowave && t->dbg_mcycle == 3 && p_mc == 2 && ins < 2 && iowave_left == 0) {
+            iowave_left = 26;
+            printf("    začátek M3 (clk, A, IORQ RD WR, T, M, CE):\n");
+        }
+        p_mc = t->dbg_mcycle;
+        if (iowave_left > 0) {
+            iowave_left--;
+            printf("    %7ld A=%04X IORQ=%d RD=%d WR=%d T=%d M=%d %s%s\n", clk, t->addr, !iorq, !rd, !wr,
+                   t->dbg_tstate, t->dbg_mcycle, t->dbg_ce_p ? "CEp" : "", t->dbg_ce_n ? "CEn" : "");
+        }
+
         // --- I/O
         if (!m1 && iorq && wr) { io_write_seen = true; io_port = t->addr & 0xFF; io_data = t->dout; }
         if (!m1 && iorq && rd) io_read_seen = true;
@@ -209,6 +235,9 @@ static void run_mode(const Mode& m) {
 
     snprintf(b, sizeof b, "(OUT %d, špatně %d, IN %d)", out11, out11_bad, ins);
     check("5. OUT (11h) pošle hodnotu z předchozího IN", out11 > 100 && out11_bad == 0, b);
+
+    snprintf(b, sizeof b, "(IORQ před RD nejvýš %d, před WR nejvýš %d taktů clk)", in_lead, out_lead);
+    check("6. I/O: IORQ spadne současně s RD (IN) a WR (OUT)", ins > 100 && in_lead == 0 && out_lead == 0, b);
 }
 
 int main(int argc, char** argv) {

@@ -50,6 +50,11 @@ module sordm5_core #(
    output logic                video_ce_pix,
    output logic signed [15:0]  audio,
 
+   // kazetový magnetofon (externí zařízení, v emu): port 50h
+   output logic                ce_cpu,    // takt CPU pro zařízení mimo jádro (stojí při zmrazení)
+   input  wire                 cas_in,    // signál z kazety -> port 50h čtení, bit 0
+   output logic                cas_motor, // port 50h zápis, bit 1 (motor / remote)
+
    // debugger (jen DEBUG = 1), viz rtl/CPU/tv80_dbg.sv
    input   tv80_dbg_pkg::dbg_in_t  dbg_i,
    output  tv80_dbg_pkg::dbg_out_t dbg_o,
@@ -73,6 +78,7 @@ clock clock_i(
    .ce_3m58_n(ce_3m58_n),
    .ce_10m7_p(ce_10m7_p)
 );
+assign ce_cpu = ce_3m58_p;
 
 // Čas počítače pro ladění (takty CPU od resetu, při zmrazení stojí).
 tstamp tstamp_i(
@@ -92,10 +98,11 @@ logic        ROM0_n, ROM1_n, ROM2_n, EXM_n, EXIOA_n, EXIOB_n;
 
 // vnitřní výběry obvodů (GA015)
 logic cs_ctc_n, cs_sgc_n, cs_ram0_n, cs_ram1_n, cs_kb_n, cs_vdp_rd_n, cs_vdp_wr_n;
+logic cs_sts_n, cs_com_n;                // port 50h čtení / zápis
 
 // Data periferií na DI. Každá mimo svůj výběr vrací FFh, sloučí se přes AND.
-logic [7:0] data_ctc, data_rom, data_ram, data_kb, data_vdp, data_ext;
-assign DI = data_ctc & data_rom & data_ram & data_kb & data_vdp & data_ext;
+logic [7:0] data_ctc, data_rom, data_ram, data_kb, data_vdp, data_ext, data_sts;
+assign DI = data_ctc & data_rom & data_ram & data_kb & data_vdp & data_ext & data_sts;
 
 // ostatní spoje mezi bloky
 logic        ctc_int_n;                  // CTC -> INT Z80
@@ -186,7 +193,11 @@ ga015 ga015_i
    .CSW_n(cs_vdp_wr_n),
    .KB_n(cs_kb_n),
    .CTC_n(cs_ctc_n),
-   .SGC_n(cs_sgc_n)
+   .SGC_n(cs_sgc_n),
+   .STS_n(cs_sts_n),
+   .PCOM_n(cs_com_n),
+   .PDT_n(),
+   .PSTB_n()
 );
 
 // Zvukovy cip SN76489 (jt89) — port 0x20, jen zapis, takt 3.58 MHz jako CPU.
@@ -276,7 +287,7 @@ vdp18_core #(.compat_rgb_g(0)) vdp_i
     .ce_pix(video_ce_pix)
 );
 
-logic key_rst;                           // klávesa RESET, zatím nezapojená (TODO.md)
+logic key_rst;                           // klávesa RESET (PC Esc), port 50h bit 7
 keyboard keyboard_i
 (
    .clk_i(clk_sys),
@@ -286,6 +297,18 @@ keyboard keyboard_i
    .kb_data_o(data_kb),
    .kb_rst_o(key_rst)
 );
+
+// Port 50h (jako původní jádro, addr_dec.vhd a bus_mux.vhd):
+//   čtení  bit 7 klávesa RESET, bit 0 signál z kazety, ostatní 0
+//   zápis  bit 1 motor kazety (drží se do dalšího zápisu nebo resetu)
+assign data_sts = !cs_sts_n ? {key_rst, 6'b000000, cas_in} : 8'hFF;
+
+always_ff @(posedge clk_sys) begin
+   if (reset)
+      cas_motor <= 1'b0;
+   else if (!cs_com_n)
+      cas_motor <= DO[1];
+end
 
 
 /*verilator tracing_off*/

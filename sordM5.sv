@@ -32,12 +32,10 @@ module emu
 
 ///////// Default values for ports not used in this core /////////
 
-assign ADC_BUS  = 'Z;
 assign USER_OUT = '1;
 assign {UART_RTS, UART_DTR} = 0;          // UART_TXD: debugger Z80 (dbg_link)
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
-assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;  
 
 assign VGA_F1 = 0;
 assign VGA_SCALER  = 0;
@@ -48,12 +46,13 @@ assign HDMI_FREEZE = dbg_stopped;    // debugger stoji: drz posledni snimek
 assign HDMI_BLACKOUT = 0;
 assign HDMI_BOB_DEINT = 0;
 
-wire signed [15:0] audio;
+wire signed [15:0] audio;             // zvuk pocitace
+wire signed [15:0] audio_out;         // + priposlech kazety (nize)
 // Debugger zastavil pocitac: zastaveny obraz (HDMI_FREEZE) i zvuk (ticho).
 // Zvukovy cip stoji a drzel by posledni vzorek (stejnosmerna slozka).
 assign AUDIO_S = 1;                  // signed
-assign AUDIO_L = dbg_stopped ? 16'sd0 : audio;
-assign AUDIO_R = dbg_stopped ? 16'sd0 : audio;
+assign AUDIO_L = dbg_stopped ? 16'sd0 : audio_out;
+assign AUDIO_R = dbg_stopped ? 16'sd0 : audio_out;
 assign AUDIO_MIX = 0;
 
 assign LED_DISK = 0;
@@ -67,6 +66,10 @@ localparam CONF_STR = {
 	"Sord M5;;",
 	"-;",
     "F1,binROM,Load to ROM;",
+	"F2,CAS,Load Tape,30000000;",
+	"O[11],Tape Sound,Off,On;",
+	"O[12],Fast Tape,Off,On;",
+	"O[13],Tape Input,File,ADC;",
 	"O[2:1],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
     "O[5:3],Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
     "O[8:6],Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer,HV-Integer;",
@@ -113,7 +116,12 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io_i
 	.ioctl_wait(1'b0)
 );
 
-wire reset = RESET | status[0] | buttons[1] | ioctl_download;
+// Kazeta (blok KAZETA nize). Nahrani kazety pocitac neresetuje (kazeta se
+// vklada do beziciho pocitace).
+wire tape_loading;                    // nahrava se soubor CAS
+wire ce_cpu;                          // takt CPU z jadra, stoji pri zmrazeni
+wire cas_in;                          // signal z kazety -> pocitac
+wire cas_motor;                       // motor z pocitace (port 50h bit 1)
 
 ///////////////////////   CLOCKS   ///////////////////////////////
 
@@ -124,6 +132,16 @@ pll pll_i
 	.rst(1'b0),
 	.outclk_0(clk_sys)
 );
+
+// Reset jadra je registrovany. TV80 ma asynchronni reset, kombinacni vyraz
+// by ho resetoval i glitchem: pri nabehu ioctl_download dorazi prima cesta
+// driv nez negace tape_loading (ktera download obsahuje taky), vznikne kratky
+// puls a CPU se resetoval pri nahrani kazety, aniz by synchronni logika
+// (tstamp, periferie) reset videla. Nalezeno debuggerem: PC=0, SP=0, R=0
+// a cas pocitace bezel dal.
+logic reset = 1'b1;
+always_ff @(posedge clk_sys)
+	reset <= RESET | status[0] | buttons[1] | (ioctl_download & !tape_loading);
 logic [7:0] video_r, video_g, video_b;
 logic       video_hs_n, video_vs_n, video_hblank, video_vblank, video_ce_pix;
 
@@ -197,10 +215,96 @@ sordm5_core #(.DEBUG(DEBUG)) sordm5_i
 	.video_ce_pix(video_ce_pix),
 	.audio(audio),
 
+	.ce_cpu(ce_cpu),
+	.cas_in(cas_in),
+	.cas_motor(cas_motor),
+
 	.dbg_i(dbg_i),
 	.dbg_o(dbg_o),
 	.tstamp(tstamp)
 );
+
+/////////////////  KAZETA  /////////////////
+// Magnetofon neni soucast pocitace, je to externi zarizeni ("side car"):
+// do jadra jde jen hotovy signal z kazety (port 50h bit 0), ven motor.
+//
+// Soubor CAS nahraje MiSTer primo do DDR od 0x30000000 (CONF_STR
+// "F2,CAS,Load Tape,30000000"), ioctl nese jen informaci o nahrani a
+// velikost souboru (ioctl_addr po dobu ioctl_download). ddram.sv mapuje svou
+// adresu 0 na 0x30000000. Jeho mezipamet se po nahrani vyprazdni resetem.
+wire [27:0] tape_addr;
+wire  [7:0] tape_dout;
+wire        tape_rd, tape_ready;
+wire        tape_file;                // signal ze souboru CAS
+
+assign DDRAM_CLK = clk_sys;
+
+ddram ddram_i
+(
+	.reset(tape_loading),
+	.DDRAM_CLK(clk_sys),
+	.DDRAM_BUSY(DDRAM_BUSY),
+	.DDRAM_BURSTCNT(DDRAM_BURSTCNT),
+	.DDRAM_ADDR(DDRAM_ADDR),
+	.DDRAM_DOUT(DDRAM_DOUT),
+	.DDRAM_DOUT_READY(DDRAM_DOUT_READY),
+	.DDRAM_RD(DDRAM_RD),
+	.DDRAM_DIN(DDRAM_DIN),
+	.DDRAM_BE(DDRAM_BE),
+	.DDRAM_WE(DDRAM_WE),
+	.addr(tape_addr),
+	.dout(tape_dout),
+	.din(8'hFF),
+	.we(1'b0),
+	.rd(tape_rd),
+	.ready(tape_ready)
+);
+
+cas_player #(.IOCTL_INDEX(6'd2)) cas_player_i
+(
+	.clk(clk_sys),
+	.ce(ce_cpu),
+	.ioctl(ioctl),
+	.loading(tape_loading),
+	.cas_on(cas_motor),
+	.cas_fast(status[12]),            // menu Fast Tape
+	.cas_out(tape_file),
+	.border(),
+	.mem_addr(tape_addr),
+	.mem_rd(tape_rd),
+	.mem_dout(tape_dout),
+	.mem_ready(tape_ready)
+);
+
+// Skutecny magnetofon na audio vstupu desky (ADC LTC2308 v sys/ltc2308.sv,
+// prevod na logicky signal s hysterezi). active = na vstupu je signal.
+wire tape_adc, tape_adc_act;
+
+ltc2308_tape #(.ADC_RATE(120000), .CLK_RATE(21_477_272)) tape_adc_i
+(
+	.reset(RESET),
+	.clk(clk_sys),
+	.ADC_BUS(ADC_BUS),
+	.dout(tape_adc),
+	.active(tape_adc_act),
+	.adc_sync(),
+	.adc_data()
+);
+
+// Zdroj signalu kazety (menu Tape Input): soubor CAS, nebo vstup ADC.
+// Vstup z ADC jde do pocitace bez ohledu na motor jako na skutecnem M5
+// (magnetofon hraje, i kdyz ho pocitac neovlada).
+wire tape_src_adc = status[13];
+assign cas_in = tape_src_adc ? (tape_adc_act & tape_adc) : tape_file;
+
+// Priposlech kazety (menu Tape Sound): signal z kazety se primicha do
+// zvuku jako obdelnik +-1/8 rozsahu, se saturaci. Ze souboru pri zapnutem
+// motoru, z ADC kdyz je na vstupu signal.
+wire               tape_sound = status[11] & (tape_src_adc ? tape_adc_act : cas_motor);
+wire signed [16:0] audio_mix  = $signed({audio[15], audio}) +
+                                (tape_sound ? (cas_in ? 17'sd4096 : -17'sd4096) : 17'sd0);
+assign audio_out = (audio_mix >  17'sd32767) ? 16'sh7FFF :
+                   (audio_mix < -17'sd32768) ? 16'sh8000 : audio_mix[15:0];
 
 /////////////////  VIDEO  /////////////////
 logic scandoubler;

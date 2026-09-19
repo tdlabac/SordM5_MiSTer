@@ -11,3 +11,5 @@ set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) G
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) dbg_link.sv                              ]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) tstamp.sv                                ]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) EXT/ext_bus.sv                           ]
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) ddram.sv                                 ]
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) TAPE/cas_player.sv                       ]

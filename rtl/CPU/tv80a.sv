@@ -134,8 +134,15 @@ module TV80a#(
     // M1 rises; for that window the bus looks like an I/O write (IORQ=0,
     // M1=1, RD=1) to Z80 peripherals without a WR pin (CTC, PIO, SIO).
     assign IORQ_n  = IORQ_n_i || (IReq_Inhibit && IntCycle_n) || (~IntCycle_n && M1_n);
-    assign RD_n    = RD_n_i;
-    assign WR_n    = WR_n_j;
+    // I/O cycle: IORQ, RD and WR go active together on the rising edge of T2,
+    // as on the Z80. They are all latched on CE_n in T1 and held off by
+    // IReq_Inhibit until CE_p. RD/WR used to be latched one CE_n later, half
+    // a CPU clock after IORQ; for that window an IN looked like an I/O write
+    // (IORQ=0, RD=1) to Z80 peripherals without a WR pin (CTC, PIO, SIO):
+    // IN A,(CTC) wrote DO into the channel.
+    wire   io_hold = ~IORQ_n_i && IReq_Inhibit && IntCycle_n;
+    assign RD_n    = RD_n_i || io_hold;
+    assign WR_n    = WR_n_j || io_hold;
     assign RFSH_n  = RFSH_n_i;
     assign A       = A_i;
 
@@ -216,7 +223,7 @@ module TV80a#(
                 endcase
             end else begin
                 case (TState)
-                    3'd1: if (~IORQ_n_i) WR_n_i <= ~Write;
+                    3'd1: WR_n_i <= ~Write;         // with IORQ_n_i (io_hold)
                     3'd3: WR_n_i <= '1;
                     default: ;
                 endcase
@@ -270,11 +277,7 @@ module TV80a#(
                 if (TState == 3'd1 && ~NoRead) begin
                     IORQ_n_i <= ~IORQ;
                     MREQ <= ~IORQ;
-                    if (~IORQ) begin
-                        RD <= ~Write;
-                    end else if (~IORQ_n_i) begin
-                        RD <= ~Write;
-                    end
+                    RD <= ~Write;                   // I/O: with IORQ_n_i (io_hold)
                 end
                 if (TState == 3'd3) begin
                     RD <= '0;

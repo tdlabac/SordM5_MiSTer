@@ -41,3 +41,4 @@ c5_pin_model_dump.txt
 tmp/
 obj_dir/
 obj_*/
+__pycache__/
