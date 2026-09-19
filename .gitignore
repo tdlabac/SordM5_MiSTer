@@ -40,3 +40,4 @@ c5_pin_model_dump.txt
 **/.DS_Store
 tmp/
 obj_dir/
+obj_*/
