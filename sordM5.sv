@@ -41,10 +41,10 @@ assign HDMI_FREEZE = 0;
 assign HDMI_BLACKOUT = 0;
 assign HDMI_BOB_DEINT = 0;
 
-wire signed [10:0] audio;
+wire signed [15:0] audio;
 assign AUDIO_S = 1;                  // signed
-assign AUDIO_L = {audio, 5'b0};
-assign AUDIO_R = {audio, 5'b0};
+assign AUDIO_L = audio;
+assign AUDIO_R = audio;
 assign AUDIO_MIX = 0;
 
 assign LED_DISK = 0;

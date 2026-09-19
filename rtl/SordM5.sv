@@ -38,7 +38,7 @@ module SordM5
    output                   video_vblank,
    output                   video_blank_n,
    output                   video_ce_pix,
-   output  signed [10:0]    audio
+   output  signed [15:0]    audio
 );
 
 logic ce_3m58_p, ce_3m58_n, ce_10m7_n, ce_10m7_p;
@@ -53,8 +53,9 @@ clock clock_i(
 
 logic [15:0] A;
 logic [7:0] DO, DI;
-logic MREQ_n, RD_n, WR_n, IORQ_n, M1_n;
+logic MREQ_n, RD_n, WR_n, IORQ_n, M1_n, RFSH_n;
 logic CTC_int_n;
+logic [3:0] CTC_zc_to;
 TV80a #(.Mode(0), .R800_MULU(0), .IOWait(1)) Z80
 (
    .RESET_n(!reset),
@@ -62,7 +63,7 @@ TV80a #(.Mode(0), .R800_MULU(0), .IOWait(1)) Z80
    .CLK_n(clk_sys),
    .CE_n(ce_3m58_n),
    .CE_p(ce_3m58_p),
-   .WAIT_n('1),
+   .WAIT_n(sgc_ready && EXT_WAIT_n),
    .INT_n(CTC_int_n),
    .NMI_n('1),
    .BUSRQ_n('1),
@@ -71,7 +72,7 @@ TV80a #(.Mode(0), .R800_MULU(0), .IOWait(1)) Z80
    .IORQ_n(IORQ_n),
    .RD_n(RD_n),
    .WR_n(WR_n),
-   .RFSH_n(),
+   .RFSH_n(RFSH_n),
    .HALT_n(),
    .BUSAK_n(),
    .A(A),
@@ -81,7 +82,7 @@ TV80a #(.Mode(0), .R800_MULU(0), .IOWait(1)) Z80
 
 logic [7:0] DATA_CTC;
 
-assign DI = DATA_CTC & DATA_ROM & DATA_RAM & DATA_ROM_CART & DATA_KB & DATA_TMS;
+assign DI = DATA_CTC & DATA_ROM & DATA_RAM & DATA_KB & DATA_TMS & DATA_EXT;
 
 // Z80 CTC — porty 0x00-0x0F, kanál vybírá A[1:0] (0x04-0x0F se zrcadlí).
 //
@@ -108,11 +109,12 @@ ctc ctc_i
    .int_n     (CTC_int_n),
    .iei       (1'b1),
    .ieo       (),
-   .clk_trg   ({TMS_interrupt_n, 3'b000}),
-   .zc_to     ()
+   .clk_trg   ({TMS_interrupt_n, 2'b00, EXT_INT_n}),
+   .zc_to     (CTC_zc_to)
 );
 
 logic CE_CTC_n, CE_SGC_n, CE_ROM0_n, CE_ROM1_n, CE_ROM2_n, CE_RAM0_n, CE_RAM1_n, MRD_n, MWR_n, CE_KB_n, CE_VDP_RD_n, CE_VDP_WR_n;
+logic IORD_n, IOWR_n, CE_EXM_n, CE_EXIOA_n, CE_EXIOB_n;
 ga015 ga015_i
 (
    .A(A),
@@ -126,6 +128,12 @@ ga015 ga015_i
    .MWR_n(MWR_n),
    .ROM0_n(CE_ROM0_n),
    .ROM1_n(CE_ROM1_n),
+   .ROM2_n(CE_ROM2_n),
+   .EXM_n(CE_EXM_n),
+   .EXIOA_n(CE_EXIOA_n),
+   .EXIOB_n(CE_EXIOB_n),
+   .IORD_n(IORD_n),
+   .IOWR_n(IOWR_n),
    .RAM0_n(CE_RAM0_n),
    .RAM1_n(CE_RAM1_n),
    .CSR_n(CE_VDP_RD_n),
@@ -137,7 +145,8 @@ ga015 ga015_i
 
 // Zvukovy cip SN76489 (jt89) — port 0x20, jen zapis, takt 3.58 MHz jako CPU.
 // jt89 zapisuje na nabezne hrane cs_n=0 && wr_n=0, cist z nej nejde.
-// READY (vypinani CPU pri zapisu) zatim nezapojeno, WAIT_n CPU je '1.
+logic sgc_ready;
+logic signed [10:0] audio_sgc;
 jt89 sgc_i
 (
    .rst(reset),
@@ -146,9 +155,49 @@ jt89 sgc_i
    .wr_n(WR_n),
    .cs_n(CE_SGC_n),
    .din(DO),
-   .sound(audio),
-   .ready()
+   .sound(audio_sgc),
+   .ready(sgc_ready)
 );
+
+// Rozšiřující sběrnice — cartridge a periferie volitelné z menu.
+// EXINT_n -> CTC CLK/TRG0, EXCLK <- CTC ZC/TO2 (pin 9). ROMDS_n zatím nepoužito.
+logic [7:0] DATA_EXT;
+logic EXT_WAIT_n, EXT_ROMDS_n, EXT_INT_n;
+logic signed [15:0] audio_ext;
+ext_bus ext_i
+(
+   .clk_sys(clk_sys),
+   .ce_cpu_p(ce_3m58_p),
+   .ce_cpu_n(ce_3m58_n),
+   .ioctl(ioctl),
+   .RST_n(!reset),
+   .A(A),
+   .D_o(DO),
+   .MRQ_n(MREQ_n),
+   .RFSH_n(RFSH_n),
+   .MRD_n(MRD_n),
+   .MWR_n(MWR_n),
+   .IORD_n(IORD_n),
+   .IOWR_n(IOWR_n),
+   .ROM0_n(CE_ROM0_n),
+   .ROM1_n(CE_ROM1_n),
+   .ROM2_n(CE_ROM2_n),
+   .EXM_n(CE_EXM_n),
+   .EXIOA_n(CE_EXIOA_n),
+   .EXIOB_n(CE_EXIOB_n),
+   .D_i(DATA_EXT),
+   .WAIT_n(EXT_WAIT_n),
+   .ROMDS_n(EXT_ROMDS_n),
+   .EXINT_n(EXT_INT_n),
+   .EXCLK(CTC_zc_to[2]),
+   .audio(audio_ext)
+);
+
+// Směšování zvuku: jt89 (11 b) roztažený na 16 b + sběrnice, se saturací.
+logic signed [16:0] audio_sum;
+assign audio_sum = $signed({audio_sgc[10], audio_sgc, 5'b0}) + $signed({audio_ext[15], audio_ext});
+assign audio = (audio_sum >  17'sd32767) ? 16'sh7FFF :
+               (audio_sum < -17'sd32768) ? 16'sh8000 : audio_sum[15:0];
 
 logic vram_we;
 logic [7:0] vram_di, vram_do, DATA_TMS;
@@ -232,19 +281,6 @@ rom_ioctl #(.addr_width(13),.mem_name("ROM"),.IOCTL_INDEX(0)) rom
    .address(A[12:0]),
    .q(DATA_ROM),
    .cs(!CE_ROM0_n),
-   .oe(!MRD_n)
-);
-
-// cartrige ROM
-logic [7:0] DATA_ROM_CART;
-// Cartridge ROM; ioctl index 1 = první soubor z menu (F1).
-rom_ioctl #(.addr_width(13),.mem_name("ROM_CART"),.IOCTL_INDEX(1)) rom_cart
-(
-   .clock(clk_sys),
-   .ioctl(ioctl),
-   .address(A[12:0]),
-   .q(DATA_ROM_CART),
-   .cs(!CE_ROM1_n),
    .oe(!MRD_n)
 );
 
