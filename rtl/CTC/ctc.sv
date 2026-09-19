@@ -96,6 +96,28 @@ module ctc
 
    assign cpuACKint = (!iorq_n && !m1_n);
 
+   // Běžný I/O cyklus CPU (ne potvrzení přerušení).
+   //
+   // TV80 na konci potvrzení přerušení zvedne M1 (na CE_p) o půl taktu CPU
+   // dřív než IORQ (na CE_n). V tom okně je IORQ=0, M1=1, RD=1 a na adrese je
+   // refresh (I, R) — pro CTC k nerozeznání od zápisu. Když horní nibble R
+   // vyjde 0, CTC by si ho vzalo jako zápis: na kanál 0 s D0=0 přepsalo vektor
+   // přerušení, jinde přeprogramovalo kanál hodnotou z DO. Závisí to na R, takže
+   // se to projeví náhodně po chvíli běhu (další přerušení skočí na špatnou
+   // adresu).
+   //
+   // Proto: cyklus IORQ, který začal jako potvrzení, zůstává potvrzením, dokud
+   // IORQ nespadne zpátky do jedničky.
+   logic ack_cycle = 1'b0;
+   always_ff @(posedge clk) begin
+      if (iorq_n)
+         ack_cycle <= 1'b0;
+      else if (!m1_n)
+         ack_cycle <= 1'b1;
+   end
+
+   wire io_cycle = !iorq_n && m1_n && !ack_cycle;
+
    // Kanál s nejvyšší prioritou mezi čekajícími (0 je nejvyšší).
    logic [1:0] prio_ch;
    always_comb begin
@@ -116,7 +138,7 @@ module ctc
                      ack_hold);
 
    // Čtení z CTC: vybraný obvod, I/O cyklus (ne potvrzení), RD aktivní.
-   wire read_oe = !en_n && !iorq_n && m1_n && !rd_n;
+   wire read_oe = !en_n && io_cycle && !rd_n;
 
    // Prioritu pouští dál jen když tohle CTC nic nechce ani neobsluhuje.
    assign ieo = iei && (state == ST_IDLE) && (internalInt == 4'b0000);
@@ -192,7 +214,7 @@ module ctc
 
    always_ff @(posedge clk) begin : cpuInt
       // Vektor přerušení se podle datasheetu plní zápisem na kanál 0 s D0=0.
-      if (!en_n && rd_n && !iorq_n && m1_n && cs == 2'b00 && !dIn[0] && !setTC)
+      if (!en_n && rd_n && io_cycle && cs == 2'b00 && !dIn[0] && !setTC)
          irqVect <= dIn[7:3];
    end
 
@@ -220,7 +242,7 @@ module ctc
             .zc_to     (zc_to[i])
          );
 
-         assign cSel[i] = (!en_n && !iorq_n && m1_n && (cs == CH[1:0]));
+         assign cSel[i] = (!en_n && io_cycle && (cs == CH[1:0]));
       end
    endgenerate
 

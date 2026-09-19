@@ -43,11 +43,25 @@ static uint8_t io_read(int ch) {
 
 static bool ack_stable = true;   // byl vektor po celou dobu IORQ stejny?
 
+// Potvrzeni preruseni tak, jak ho dela TV80:
+//   - M1 pada o takt driv nez IORQ,
+//   - na konci M1 vyskoci NAHORU o 3 takty clk_sys driv nez IORQ
+//     (M1 se meni na CE_p, IORQ na CE_n),
+//   - na adrese je refresh (I, R); dekoder GA015 bere CTC jen podle A[7:4]
+//     a IORQ, takze pri R s hornim nibblem 0 je CTC vybrane (en_n=0),
+//     kanal 0, a na datech je, co zrovna zbylo na DO.
+// V tom okne vypada sbernice jako zapis do CTC — CTC ho nesmi vzit.
+static uint8_t tail_data = 0x00;  // DO v okne na konci (00 = D0=0 -> vektor)
+static int     tail_cs   = 0;
+
 static uint8_t int_ack() {
     dut->rd_n = 1;
     dut->m1_n = 0;               // M1 pada o takt driv nez IORQ
     tick();
     dut->iorq_n = 0;
+    dut->en_n = 0;               // refresh adresa trefi dekoder CTC
+    dut->cs   = tail_cs;
+    dut->dIn  = tail_data;
     uint8_t sampled = 0, first = 0;
     ack_stable = true;
     for (int t = 0; t < 12; t++) {
@@ -58,6 +72,8 @@ static uint8_t int_ack() {
         if (t == 6) sampled = v; // tady vektor cte TV80
         tick();
     }
+    dut->m1_n = 1;               // konec: M1 nahoru, IORQ jeste dole
+    ticks(3);
     bus_idle();
     ticks(4);
     return sampled;
@@ -348,6 +364,34 @@ int main(int argc, char** argv) {
     uint8_t v20 = int_ack();
     dut->iei = 1;
     check("20. ack s iei=0 -> dOut 0xFF", v20 == 0xFF);
+
+    // ---------------------------------------------------------------- 21
+    // Konec potvrzeni (M1=1, IORQ=0, RD=1) s D0=0 na kanal 0 nesmi prepsat
+    // vektor. Pred opravou tady CTC zapsalo vektor 0 a dalsi preruseni
+    // skocilo na spatnou adresu.
+    hw_reset();
+    io_write(0, 0xE0);
+    io_write(0, 0x85);
+    io_write(0, 5);
+    tail_cs = 0; tail_data = 0x00;
+    wait_int(400); int_ack(); do_reti();
+    wait_int(400);
+    uint8_t v21 = int_ack();
+    check("21. konec potvrzeni neprepise vektor (druhy ack = 0xE0)", v21 == 0xE0);
+    printf("     druhy vektor 0x%02X\n", v21);
+
+    // ---------------------------------------------------------------- 22
+    // Totez s ridicim slovem "reset kanalu" (D0=1, D1=1) na kanal, ktery
+    // prave preruseni vyvolal - kanal se nesmi zastavit.
+    hw_reset();
+    io_write(0, 0xE0);
+    io_write(1, 0x85);                    // kanal 1: timer /16, int
+    io_write(1, 5);
+    tail_cs = 1; tail_data = 0x03;
+    wait_int(400); int_ack(); do_reti();
+    long t22 = wait_int(400);
+    check("22. konec potvrzeni neprogramuje kanal (dalsi preruseni prijde)", got_int(t22));
+    tail_cs = 0; tail_data = 0x00;
 
     printf("\n%s (%d chyb)\n", fails ? "NEPROSLO" : "VSE PROSLO", fails);
     delete dut;

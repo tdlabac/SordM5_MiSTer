@@ -923,7 +923,14 @@ module TV80#( parameter Mode      = 0,
             if (IntCycle | NMICycle)
                 Halt_FF <= '0;
 
-            if (MCycle == 3'd1 && TState == 3'd2 && WAIT_n)
+            // Interrupt acknowledge: T2 is stretched by the automatic wait
+            // states (Auto_Wait), and tv80a latches the vector from the bus
+            // on every CE_n while TState == 2. M1 must therefore stay low
+            // until T2 really ends, otherwise the last latch happens with M1
+            // already high, a Z80 peripheral no longer drives its vector and
+            // 0xFF is taken instead. Opcode fetch and NMI are unchanged.
+            if (MCycle == 3'd1 && TState == 3'd2 && WAIT_n &&
+                ~(IntCycle && Auto_Wait && ~Auto_Wait_t2))
                 M1_n <= '1;
 
             if (BusReq_s & BusAck) begin

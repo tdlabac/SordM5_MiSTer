@@ -119,7 +119,11 @@ module TV80a#(
     assign WR_n_j  = WR_n_i;
 
     assign MREQ_n  = MREQ_n_i;
-    assign IORQ_n  = IORQ_n_i || (IReq_Inhibit && IntCycle_n);
+    // Interrupt acknowledge: IORQ ends together with M1, as on the Z80.
+    // IORQ_n_i alone would stay low until CE_n in T3, half a CPU clock after
+    // M1 rises; for that window the bus looks like an I/O write (IORQ=0,
+    // M1=1, RD=1) to Z80 peripherals without a WR pin (CTC, PIO, SIO).
+    assign IORQ_n  = IORQ_n_i || (IReq_Inhibit && IntCycle_n) || (~IntCycle_n && M1_n);
     assign RD_n    = RD_n_i;
     assign WR_n    = WR_n_j;
     assign RFSH_n  = RFSH_n_i;

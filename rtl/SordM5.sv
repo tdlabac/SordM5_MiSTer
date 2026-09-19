@@ -129,7 +129,8 @@ ga015 ga015_i
    .RAM1_n(CE_RAM1_n),
    .CSR_n(CE_VDP_RD_n),
    .CSW_n(CE_VDP_WR_n),
-   .KB_n(CE_KB_n)
+   .KB_n(CE_KB_n),
+   .CTC_n(CE_CTC_n)
 );
 
 logic vram_we;
