@@ -19,6 +19,10 @@
 //    0Ah  R  hit[7:0]         0Bh hit[15:8]
 //    10h  RW mem_addr[7:0]    11h mem_addr[15:8]   12h mem_wdata
 //    13h  W  1 = čtení, 2 = zápis (jen při zastavení); R: mem_rdata
+//    18h-1Dh  R  čas počítače (rtl/tstamp.sv, takty CPU od resetu), 48 bitů
+//             little-endian. Hodnota se zachytí, když adresa vstoupí do
+//             rozsahu, a drží se, dokud v něm zůstává (blokové čtení je
+//             konzistentní i za běhu). Při zastavení čas stojí.
 //    20h-3Ah  R: aktuální registry (REG, bajt 0 = REG[7:0]), W: staging
 //    40h + 8*i, i = 0..NBP-1: breakpoint i (RW)
 //             +0 kind  +1 addr lo  +2 addr hi  +3 amask lo  +4 amask hi
@@ -37,7 +41,8 @@ module tv80_dbg_regs
    output logic [7:0]  rdata,
 
    output dbg_in_t     dbg_i,
-   input  dbg_out_t    dbg_o
+   input  dbg_out_t    dbg_o,
+   input  logic [47:0] tstamp          // čas počítače (rtl/tstamp.sv)
 );
    localparam int         REGB   = 27;       // bajtů REG (212 bitů)
    localparam logic [7:0] REG_LO = 8'h20;    // REG na 20h..3Ah
@@ -108,6 +113,12 @@ module tv80_dbg_regs
       for (int i = 0; i < NBP; i++) dbg_i.bp[i] = bps[i];
    end
 
+   // čas: snímek se drží, dokud se čte rozsah 18h-1Dh
+   logic [47:0] ts_snap;
+   wire         ts_rd = addr >= 8'h18 && addr <= 8'h1D;
+   always_ff @(posedge clk)
+      if (!ts_rd) ts_snap <= tstamp;
+
    // čtení
    wire [15:0] hit16 = 16'(dbg_o.hit);
    always_comb begin
@@ -128,6 +139,12 @@ module tv80_dbg_regs
          8'h11: rdata = mem_addr[15:8];
          8'h12: rdata = mem_wdata;
          8'h13: rdata = dbg_o.mem_rdata;
+         8'h18: rdata = ts_snap[7:0];
+         8'h19: rdata = ts_snap[15:8];
+         8'h1A: rdata = ts_snap[23:16];
+         8'h1B: rdata = ts_snap[31:24];
+         8'h1C: rdata = ts_snap[39:32];
+         8'h1D: rdata = ts_snap[47:40];
          default: ;
       endcase
       if (addr >= REG_LO && addr < REG_HI)

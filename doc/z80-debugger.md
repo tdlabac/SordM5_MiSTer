@@ -254,4 +254,56 @@ Na PC most na GDB Remote Serial Protocol (Python). Ve FPGA se RSP neřeší.
    registrů, 9 breakpointů, paměť). V kořeni `sordM5.sv` je
    `DEBUG = 1` jen s `SIMULATION` (define ze `sordM5.sh`). End-to-end
    test `rtl/CPU/tb/run_link.sh` pouští tutéž třídu `Z80Dbg` ve WSL.
-6. UART, případně DDR.
+6. ✅ UART přes HPS: `rtl/dbg_link.sv` (UART 230 400 8N1 + protokol,
+   blokové čtení/zápis paměti), v kořeni `DEBUG = 1` i ve FPGA. Nástroje
+   `tools/z80dbg` (knihovna, CLI, GDB stub ve stylu MAME, most pro MiSTer),
+   test `rtl/CPU/tb/run_uart.sh` proti modelu. Podrobnosti
+   v [z80-debugger-protokol.md](z80-debugger-protokol.md). Na HW neověřeno.
+7. ✅ Překlad bez debuggeru pro simulaci a časová značka (viz níž).
+8. Případně DDR pro trace buffer, disassembler v panelu simulace, TCP
+   server protokolu v sim appce.
+
+## Překlad s debuggerem a bez něj
+
+Debugger ve verilatoru stojí výkon (obálka, registrový prostor, DPI volání
+na každý takt). Kořen `sordM5.sv` ho proto vypíná definem `Z80DBG_OFF`:
+CPU je holé `TV80a` (`tv80_dbg` s `DEBUG = 0`), `dbg_link` ani
+`tv80_dbg_regs` se nevytvoří, `UART_TXD` stojí v 1.
+
+| překlad | debugger |
+|---|---|
+| Quartus | vždy (define se nenastavuje) |
+| `./sordM5.sh` | vypnutý (výchozí) |
+| `Z80DBG=1 ./sordM5.sh` | zapnutý, panel „Z80 debugger“ v sim appce |
+
+## Časová značka: od chyby na HW k trace v simulaci
+
+`rtl/tstamp.sv` počítá **takty CPU od posledního resetu** (`ce_3m58_p`,
+48 bitů). Je součástí jádra, ne debuggeru, takže existuje v obou
+variantách. Při zmrazení debuggerem stojí, stejně jako celý počítač, takže
+stejný okamžik běhu má na HW i v simulaci stejnou hodnotu. Reset jádra,
+včetně nahrání ROM přes ioctl, ji nuluje.
+
+Postup:
+1. Na HW zastavit v místě problému (breakpoint, stop) a přečíst čas:
+   CLI `status` nebo `time`, GDB `monitor time`. Debugger ho čte
+   z registrového prostoru 18h–1Dh.
+2. V simulaci (klidně bez debuggeru, je rychlejší) v panelu „Z80 debugger“,
+   oddíl Časová značka:
+   - **Trace od**: v tomto čase se zapne trace (`Sim::Trace`); hloubka
+     a soubor se nastavují v okně trace;
+   - **Zastavit v**: v tomto čase se simulace zastaví.
+   Na zastavené simulaci jde pak nastavit trace do podrobna a krokovat.
+3. Značka se zastaví přesně na taktu CPU, kdy čas dosáhne hodnoty. SV
+   porovnává každý takt, C++ se ptá jen jednou za 4096 taktů `clk_sys`
+   (`verilator/rtl/tstamp_dpi.sv`, `sim/modules/TimeMark.h`).
+
+**Podmínka shody:** stejné vstupy. Stisk klávesy v jiném okamžiku
+(v taktech CPU) posune všechno za ním. Chyby, které nastanou bez vstupu
+nebo před prvním vstupem, sedí přesně. Jinak značka ukazuje jen
+přibližné místo.
+
+Testy: `rtl/tb/run_tstamp.sh` (přesnost zastavení, blízké značky, značka
+v minulosti, reset), `rtl/tb/run_freeze.sh` (čas zmrazované a volně
+běžící instance se shoduje v každém taktu), `rtl/CPU/tb/run_uart.sh` (čtení
+času přes protokol).

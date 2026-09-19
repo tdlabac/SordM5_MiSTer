@@ -29,7 +29,7 @@ module emu
 
 assign ADC_BUS  = 'Z;
 assign USER_OUT = '1;
-assign {UART_RTS, UART_TXD, UART_DTR} = 0;
+assign {UART_RTS, UART_DTR} = 0;          // UART_TXD: debugger Z80 (dbg_link)
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;  
@@ -121,37 +121,57 @@ logic [7:0] video_R, video_G, video_B;
 logic       video_HS_n, video_VS_n, video_hblank, video_vblank, video_blank_n, video_ce_pix;
 logic       TMS_interrupt_n;
 
-// Debugger Z80 (doc/z80-debugger.md). Zatim jen v simulaci: dbg_link tam
-// nahrazuje DPI most do sim appky, ve FPGA je to pahyl a debugger je vypnuty.
-`ifdef SIMULATION
-localparam DEBUG = 1;
-`else
+// Debugger Z80 (doc/z80-debugger.md). Ve FPGA jde pres UART jadra na UART
+// HPS (/dev/ttyS1, 230400 8N1, protokol doc/z80-debugger-protokol.md),
+// v simulaci dbg_link nahrazuje DPI most do sim appky.
+//
+// Z80DBG_OFF (define) debugger vypne: CPU je hole TV80a, dbg_link ani
+// registrovy prostor se nevytvori, UART_TXD stoji v 1. Quartus ho nedefinuje
+// (debugger je ve FPGA vzdy), verilator ano, pokud se sordM5.sh nespusti
+// se Z80DBG=1 (debugger v simulaci stoji vykon).
+`ifdef Z80DBG_OFF
 localparam DEBUG = 0;
+`else
+localparam DEBUG = 1;
 `endif
 tv80_dbg_pkg::dbg_in_t dbg_i;
-wire       dbg_wr;
-wire [7:0] dbg_addr, dbg_wdata, dbg_rdata;
+wire [47:0] tstamp;                  // cas pocitace (takty CPU od resetu)
 
-dbg_link dbg_link_i
-(
-	.clk(clk_sys),
-	.wr(dbg_wr),
-	.addr(dbg_addr),
-	.wdata(dbg_wdata),
-	.rdata(dbg_rdata)
-);
+generate
+if (DEBUG) begin : g_dbg
+	wire       dbg_wr;
+	wire [7:0] dbg_addr, dbg_wdata, dbg_rdata;
 
-tv80_dbg_regs dbg_regs_i
-(
-	.clk(clk_sys),
-	.reset(RESET),                     // breakpointy preziji reset jadra
-	.wr(dbg_wr),
-	.addr(dbg_addr),
-	.wdata(dbg_wdata),
-	.rdata(dbg_rdata),
-	.dbg_i(dbg_i),
-	.dbg_o(dbg_o)
-);
+	// clk_sys = 21,477272 MHz (rtl/pll/pll_0002.v) = 6 x 3,579545 MHz
+	dbg_link #(.CLK_HZ(21_477_272), .BAUD(230_400)) dbg_link_i
+	(
+		.clk(clk_sys),
+		.reset(RESET),
+		.uart_rxd(UART_RXD),
+		.uart_txd(UART_TXD),
+		.wr(dbg_wr),
+		.addr(dbg_addr),
+		.wdata(dbg_wdata),
+		.rdata(dbg_rdata)
+	);
+
+	tv80_dbg_regs dbg_regs_i
+	(
+		.clk(clk_sys),
+		.reset(RESET),                     // breakpointy preziji reset jadra
+		.wr(dbg_wr),
+		.addr(dbg_addr),
+		.wdata(dbg_wdata),
+		.rdata(dbg_rdata),
+		.dbg_i(dbg_i),
+		.dbg_o(dbg_o),
+		.tstamp(tstamp)
+	);
+end else begin : g_nodbg
+	assign dbg_i    = '0;
+	assign UART_TXD = 1'b1;
+end
+endgenerate
 
 SordM5 #(.DEBUG(DEBUG)) sordm5_i
 (
@@ -174,7 +194,8 @@ SordM5 #(.DEBUG(DEBUG)) sordm5_i
 	.audio(audio),
 
 	.dbg_i(dbg_i),
-	.dbg_o(dbg_o)
+	.dbg_o(dbg_o),
+	.tstamp(tstamp)
 );
 
 /////////////////  VIDEO  /////////////////

@@ -164,7 +164,7 @@ int main(int argc, char** argv) {
       bool bus_cmp = !t->a_busy && !busy_d;
       busy_d = t->a_busy;
       bool diff = t->a_rgb != t->b_rgb || t->a_sync != t->b_sync || t->a_audio != t->b_audio ||
-                  !reg_eq(t->a_reg, t->b_reg) ||
+                  !reg_eq(t->a_reg, t->b_reg) || t->a_ts != t->b_ts ||
                   (bus_cmp && (t->a_addr != t->b_addr || t->a_do != t->b_do || t->a_di != t->b_di ||
                                t->a_ctl != t->b_ctl));
       if (diff) {
@@ -175,7 +175,8 @@ int main(int argc, char** argv) {
          printf("  A %04X/%04X DO %02X/%02X DI %02X/%02X ctl %02X/%02X reg %s\n", t->a_addr, t->b_addr,
                 t->a_do, t->b_do, t->a_di, t->b_di, t->a_ctl, t->b_ctl,
                 reg_eq(t->a_reg, t->b_reg) ? "stejné" : "RŮZNÉ");
-         printf("  PC %04X/%04X\n", getb(t->a_reg, 64, 16), getb(t->b_reg, 64, 16));
+         printf("  PC %04X/%04X  čas %llu/%llu\n", getb(t->a_reg, 64, 16), getb(t->b_reg, 64, 16),
+                (unsigned long long)t->a_ts, (unsigned long long)t->b_ts);
          printf("\nNEPROSLO\n");
          delete t; return 1;
       }
@@ -194,7 +195,11 @@ int main(int argc, char** argv) {
    printf("Taktů a %ld: společných %ld, zmrazených %ld; snímků (VSYNC) %ld\n", clocks, common, frozen, vsyncs);
    printf("Zastavení: stop %ld, breakpoint %ld, kroků %ld; DIRSet %ld; čtení %ld, zápisů zpět %ld\n",
           stops, bp_stops, steps, dirsets, reads, writes);
-   printf("Přerušení %ld, nenulových bajtů VRAM %d\n", intas, vram_used);
+   printf("Přerušení %ld, nenulových bajtů VRAM %d; čas počítače na konci %llu (a = b)\n", intas, vram_used,
+          (unsigned long long)t->a_ts);
+   bool ts_ok = t->a_ts == t->b_ts && t->a_ts > (uint64_t)(common / 6 - 10) && t->a_ts <= (uint64_t)(common / 6 + 10);
+   printf("  %-52s %s\n", "čas = společné takty / 6 (zmrazení se nepočítá)", ts_ok ? "OK" : "CHYBA");
+   fails += !ts_ok;
    printf("  %-52s %s (%ld)\n", "PC v REG = adresa na sběrnici při zastavení", pc_bad ? "CHYBA" : "OK", pc_bad);   fails += pc_bad != 0;
    printf("  %-52s %s (%ld)\n", "DIRSet s REG nezmění REG", dirset_bad ? "CHYBA" : "OK", dirset_bad);           fails += dirset_bad != 0;
    printf("  %-52s %s (%ld)\n", "čtení debuggerem = obsah ROM a RAM", read_bad ? "CHYBA" : "OK", read_bad);      fails += read_bad != 0;

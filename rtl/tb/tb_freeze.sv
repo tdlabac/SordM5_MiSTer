@@ -42,6 +42,7 @@ module tb_freeze
    output logic [7:0]   a_do,   b_do,
    output logic [7:0]   a_di,   b_di,
    output logic [5:0]   a_ctl,  b_ctl,     // {M1,MREQ,IORQ,RD,WR,RFSH}_n
+   output logic [47:0]  a_ts,   b_ts,      // čas počítače (rtl/tstamp.sv)
 
    // porovnání pamětí na konci
    input  logic [13:0]  peek_a,
@@ -64,16 +65,16 @@ module tb_freeze
       for (int i = 0; i < NBP; i++) a_i.bp[i] = bps[i];
    end
 
-`define M5_INST(name, clk, din, dout) \
+`define M5_INST(name, clk, din, dout, ts) \
    SordM5 #(.DEBUG(1)) name ( \
       .clk_sys(clk), .reset(reset), .ps2_key(11'd0), .ioctl(ioctl_idle), \
       .TMS_border(1'b0), .TMS_PAL(1'b0), .TMS_interrupt_n(), \
       .video_R(), .video_G(), .video_B(), .video_HS_n(), .video_VS_n(), \
       .video_hblank(), .video_vblank(), .video_blank_n(), .video_ce_pix(), .audio(), \
-      .dbg_i(din), .dbg_o(dout));
+      .dbg_i(din), .dbg_o(dout), .tstamp(ts));
 
-   `M5_INST(a, clk_a, a_i, a_o)
-   `M5_INST(b, clk_b, '0, b_o)
+   `M5_INST(a, clk_a, a_i, a_o, a_ts)
+   `M5_INST(b, clk_b, '0, b_o, b_ts)
 
    assign a_stopped = a_o.stopped;  assign a_reason = a_o.reason;
    assign a_busy    = a_o.mem_busy; assign a_rdata  = a_o.mem_rdata;

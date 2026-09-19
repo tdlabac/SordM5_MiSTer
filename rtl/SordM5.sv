@@ -43,7 +43,10 @@ module SordM5 #(
 
    // debugger (jen DEBUG = 1), viz rtl/CPU/tv80_dbg.sv
    input   tv80_dbg_pkg::dbg_in_t  dbg_i,
-   output  tv80_dbg_pkg::dbg_out_t dbg_o
+   output  tv80_dbg_pkg::dbg_out_t dbg_o,
+
+   // čas počítače: takty CPU od resetu (rtl/tstamp.sv), značka pro ladění
+   output  [47:0]           tstamp
 );
 
 logic ce_3m58_p, ce_3m58_n, ce_10m7_n, ce_10m7_p;
@@ -56,6 +59,14 @@ clock clock_i(
    	.ce_3m58_n(ce_3m58_n), 
     .ce_10m7_n(ce_10m7_n),
     .ce_10m7_p(ce_10m7_p)
+);
+
+// Čas počítače pro ladění (takty CPU od resetu, při zmrazení stojí).
+tstamp tstamp_i(
+   .clk(clk_sys),
+   .reset(reset),
+   .ce(ce_3m58_p),
+   .count(tstamp)
 );
 
 logic [15:0] A;
