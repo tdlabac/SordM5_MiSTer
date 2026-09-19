@@ -216,8 +216,17 @@ Na PC most na GDB Remote Serial Protocol (Python). Ve FPGA se RSP neřeší.
 3. ✅ `REG/DIRSet` v TV80 + test `run_regs.sh` (REG na každé hranici proti
    očekávanému stavu, DIRSet v Alternate = 1, výpis PUSH na zásobník, IM/IFF
    z DIRSet přes INT). Lockstep ve všech režimech prochází.
-4. `freeze` v `clock.sv`, místo zastavení, krok. Test: běh se zastaveními
-   musí dát stejný průběh jako běh bez nich (lockstep s posunem času).
+4. ✅ `freeze` v `clock.sv`, zastavení na hranici a krok v `tv80_dbg`
+   (`DEBUG = 1`, porty `dbg_stop/step/dirset/dir/stopped/reg` vyvedené ze
+   `SordM5`, v kořeni zatím uzemněné, `HDMI_FREEZE = dbg_stopped`).
+   `freeze` naskočí takt clk_sys po hraně CE_p, která hranici vytvořila.
+   Test `rtl/tb/run_freeze.sh`: dvě instance celého `SordM5` z monitor ROM
+   a BASIC-I, instance a se náhodně zastavuje, krokuje a dostává DIRSet,
+   instance b dostává takt jen když a nestojí. Video, zvuk, sběrnice CPU
+   a registry se shodují v každém taktu, RAM a VRAM na konci. Samotest:
+   `clock.sv`, jehož freeze nezastaví VDP, test shodí v prvním zmrazeném
+   taktu. Audit periferií na logiku bez CE tím prošel (CTC, jt89, VDP,
+   klávesnice bez vstupu).
 5. Breakpointy, přístup k paměti, registrový prostor, DPI přenos, GUI
    v simulaci.
 6. UART, případně DDR.

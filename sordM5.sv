@@ -37,7 +37,8 @@ assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DD
 assign VGA_F1 = 0;
 assign VGA_SCALER  = 0;
 assign VGA_DISABLE = 0;
-assign HDMI_FREEZE = 0;
+wire   dbg_stopped;                  // debugger zastavil pocitac
+assign HDMI_FREEZE = dbg_stopped;    // debugger stoji: drz posledni snimek
 assign HDMI_BLACKOUT = 0;
 assign HDMI_BOB_DEINT = 0;
 
@@ -136,7 +137,15 @@ SordM5 sordm5_i
     .video_vblank(video_vblank),
     .video_blank_n(video_blank_n),
 	.video_ce_pix(video_ce_pix),
-	.audio(audio)
+	.audio(audio),
+
+	// debugger zatim bez prenosu ven (doc/z80-debugger.md), DEBUG = 0
+	.dbg_stop(1'b0),
+	.dbg_step(1'b0),
+	.dbg_dirset(1'b0),
+	.dbg_dir('0),
+	.dbg_stopped(dbg_stopped),
+	.dbg_reg()
 );
 
 /////////////////  VIDEO  /////////////////
@@ -186,7 +195,7 @@ video_mixer #(.GAMMA(1), .LINE_LENGTH(290)) video_mixer_i
    .HBlank(video_hblank),
    .VBlank(video_vblank),
 
-   .HDMI_FREEZE(0),
+   .HDMI_FREEZE(dbg_stopped),
    .freeze_sync(),
 
    .CE_PIXEL(CE_PIXEL),

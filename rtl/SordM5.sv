@@ -20,8 +20,9 @@
 //
 //============================================================================
 
-module SordM5
-(
+module SordM5 #(
+   parameter DEBUG = 0                   // 1 = debugger Z80 (doc/z80-debugger.md)
+)(
    input                    clk_sys,
    input                    reset,
    input   [10:0]           ps2_key,
@@ -38,13 +39,23 @@ module SordM5
    output                   video_vblank,
    output                   video_blank_n,
    output                   video_ce_pix,
-   output  signed [15:0]    audio
+   output  signed [15:0]    audio,
+
+   // debugger (jen DEBUG = 1), viz rtl/CPU/tv80_dbg.sv
+   input                    dbg_stop,
+   input                    dbg_step,
+   input                    dbg_dirset,
+   input   [211:0]          dbg_dir,
+   output                   dbg_stopped,
+   output  [211:0]          dbg_reg
 );
 
 logic ce_3m58_p, ce_3m58_n, ce_10m7_n, ce_10m7_p;
+logic freeze;                            // debugger zastavil celý počítač
 clock clock_i(
 	.clk_sys(clk_sys),
 	.reset(reset),
+	.freeze(freeze),
 	.ce_3m58_p(ce_3m58_p),
    	.ce_3m58_n(ce_3m58_n), 
     .ce_10m7_n(ce_10m7_n),
@@ -56,7 +67,7 @@ logic [7:0] DO, DI;
 logic MREQ_n, RD_n, WR_n, IORQ_n, M1_n, RFSH_n;
 logic CTC_int_n;
 logic [3:0] CTC_zc_to;
-TV80a #(.Mode(0), .R800_MULU(0), .IOWait(1)) Z80
+tv80_dbg #(.Mode(0), .R800_MULU(0), .IOWait(1), .DEBUG(DEBUG)) Z80
 (
    .RESET_n(!reset),
    .R800_mode('0),
@@ -78,14 +89,13 @@ TV80a #(.Mode(0), .R800_MULU(0), .IOWait(1)) Z80
    .A(A),
    .DI(DI),
    .DO(DO),
-   .REG(),
-   .DIRSet(1'b0),
-   .DIR('0),
-   .DbgMCycle(),
-   .DbgTState(),
-   .DbgPrefix(),
-   .DbgIntCycle(),
-   .DbgNMICycle()
+   .freeze(freeze),
+   .dbg_stop(dbg_stop),
+   .dbg_step(dbg_step),
+   .dbg_dirset(dbg_dirset),
+   .dbg_dir(dbg_dir),
+   .dbg_stopped(dbg_stopped),
+   .dbg_reg(dbg_reg)
 );
 
 logic [7:0] DATA_CTC;

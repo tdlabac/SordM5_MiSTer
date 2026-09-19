@@ -54,7 +54,8 @@ module tb_lockstep (
    logic rM1, rMREQ, rIORQ, rRD, rWR, rRFSH, rHALT, rBUSAK;
 
 `ifdef DUT_DBG
-   tv80_dbg #(.Mode(0), .R800_MULU(0), .IOWait(1)) dut (
+   // debugger přeložený, ale v klidu (nikdo nezastavuje): musí být průhledný
+   tv80_dbg #(.Mode(0), .R800_MULU(0), .IOWait(1), .DEBUG(1)) dut (
 `else
    TV80a #(.Mode(0), .R800_MULU(0), .IOWait(1)) dut (
 `endif
@@ -65,6 +66,9 @@ module tb_lockstep (
 `ifndef DUT_DBG
       , .REG(d_reg), .DIRSet(dirset), .DIR(dir), .DbgMCycle(d_mc), .DbgTState(d_ts),
       .DbgPrefix(d_prefix), .DbgIntCycle(), .DbgNMICycle()
+`else
+      , .freeze(), .dbg_stop(1'b0), .dbg_step(1'b0), .dbg_dirset(1'b0), .dbg_dir('0),
+      .dbg_stopped(), .dbg_reg()
 `endif
    );
 `ifdef DUT_DBG
