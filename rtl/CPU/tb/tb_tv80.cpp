@@ -7,13 +7,13 @@
 //   1. na konci potvrzení se IORQ nezvedne později než M1 (jinak to periferie
 //      Zilogu bez vývodu WR — CTC, PIO, SIO — vezmou jako zápis na port),
 //   2. procesor vstoupí do správné obsluhy (značky v RAM ve správném pořadí),
-//   3. délka potvrzení se nezmění proti dnešnímu TV80. Zilog udává IM0 RST 13,
-//      IM1 13, IM2 19 T; TV80 dává 12..13 / 12..13 / 20..21 T. Kolísání o 1 T
-//      je vlastnost TV80: Auto_Wait_t2 si nese hodnotu z předchozího I/O
-//      cyklu, takže po IN/OUT má potvrzení o jeden wait stav méně,
-//      a IM2 je navíc o 1..2 T delší. Funkci to neovlivní, jen počet taktů.
+//   3. délka potvrzení podle Zilogu a bez kolísání: IM0 (RST) 13, IM1 13,
+//      IM2 19 T. Cyklus M1 potvrzení má 5 T a dva wait stavy, uložení PC
+//      po 3 T, u IM2 navíc dvě čtení vektoru po 3 T,
 //   4. běžná smyčka s I/O trvá 49 T-stavů (11 + 4 + 11 + 11 + 12),
-//   5. každý OUT (11h) pošle hodnotu z předchozího IN.
+//   5. každý OUT (11h) pošle hodnotu z předchozího IN,
+//   6. I/O: IORQ spadne současně s RD (IN) a WR (OUT), jako na Z80,
+//   7. NMI: odezva 11 T (M1 5 T bez wait stavů + 3 + 3).
 #include "Vtb_tv80.h"
 #include <cstdio>
 #include <cstdint>
@@ -37,8 +37,6 @@ struct Mode {
     std::vector<uint8_t> vectors;   // co řadič přerušení vystaví při potvrzení
     std::vector<uint8_t> markers;   // jaké značky čekáme v RAM (v pořadí)
     int         expect_t;    // T-stavy od potvrzení po první opkód obsluhy (Zilog)
-    int         tv80_min;    // co dnes dává TV80
-    int         tv80_max;
 };
 
 static void load_program(uint8_t im_opcode) {
@@ -62,6 +60,7 @@ static void load_program(uint8_t im_opcode) {
     put(0x70, {0x36, 0xA0, 0x23, 0xFB, 0xED, 0x4D});
     put(0x78, {0x36, 0xA1, 0x23, 0xFB, 0xED, 0x4D});
     put(0x80, {0x36, 0xA2, 0x23, 0xFB, 0xED, 0x4D});
+    put(0x66, {0xED, 0x45});                           // NMI: RETN
     for (int a = 0; a < 256; a++) {
         t->rom_we = 1; t->rom_a = a; t->rom_d = rom[a]; tick();
     }
@@ -129,6 +128,17 @@ static void run_mode(const Mode& m) {
                    t->dbg_tstate, t->dbg_mcycle, t->dbg_di_reg, t->dbg_intcycle,
                    t->dbg_ce_p ? "CEp" : "", t->dbg_ce_n ? "CEn" : "");
         }
+
+        // TB_INTWAVE=1: M-cykly a T-stavy prvního potvrzení (ladění časování)
+        static const bool intwave = getenv("TB_INTWAVE") != nullptr;
+        static int iw_left = 0, iw_pm = 0, iw_pt = 0;
+        if (intwave && acks == 1 && iw_left == 0 && inta_start >= 0) iw_left = 45;
+        if (iw_left > 0 && (t->dbg_mcycle != iw_pm || t->dbg_tstate != iw_pt) && t->dbg_ce_p) {
+            iw_left--;
+            printf("    %7ld M%d T%d  M1=%d MREQ=%d IORQ=%d RD=%d WR=%d A=%04X int=%d\n",
+                   clk, t->dbg_mcycle, t->dbg_tstate, !m1, !mreq, !iorq, !rd, !wr, t->addr, t->dbg_intcycle);
+        }
+        if (t->dbg_ce_p) { iw_pm = t->dbg_mcycle; iw_pt = t->dbg_tstate; }
 
         if (m1 && !p_m1) m1_fall = clk;             // M1 právě spadl
 
@@ -221,12 +231,10 @@ static void run_mode(const Mode& m) {
 
     int lat_min = 1 << 30, lat_max = -1;
     for (int v : lat) { if (v < lat_min) lat_min = v; if (v > lat_max) lat_max = v; }
-    // TV80 se tu od Zilogu odchyluje (viz hlavička souboru), test proto hlídá,
-    // aby se jeho současné chování nezměnilo, a odchylku jen vypíše.
-    snprintf(b, sizeof b, "(naměřeno %d..%d T, TV80 %d..%d T, Zilog %d T)",
-             lat_min, lat_max, m.tv80_min, m.tv80_max, m.expect_t);
-    check("3. délka potvrzení beze změny proti TV80", !lat.empty() &&
-          lat_min >= m.tv80_min && lat_max <= m.tv80_max, b);
+    snprintf(b, sizeof b, "(naměřeno %d..%d T, Zilog %d T, %zu potvrzení)",
+             lat_min, lat_max, m.expect_t, lat.size());
+    check("3. délka potvrzení podle Zilogu, bez kolísání", !lat.empty() &&
+          lat_min == m.expect_t && lat_max == m.expect_t, b);
 
     int lp_min = 1 << 30, lp_max = -1;
     for (int v : loop_t) { if (v < lp_min) lp_min = v; if (v > lp_max) lp_max = v; }
@@ -240,6 +248,56 @@ static void run_mode(const Mode& m) {
     check("6. I/O: IORQ spadne současně s RD (IN) a WR (OUT)", ins > 100 && in_lead == 0 && out_lead == 0, b);
 }
 
+// NMI: Zilog udává odezvu 11 T (M1 5 T bez wait stavů + 3 + 3 uložení PC).
+static void run_nmi() {
+    printf("\n=== NMI ===\n");
+    t->int_n = 1; t->nmi_n = 1; t->vec = 0xFF; t->io_rd_val = 0x40;
+    t->rst_n = 0;
+    load_program(0x56);                      // IM1, na NMI nezáleží
+    for (int i = 0; i < 60; i++) tick();
+    t->rst_n = 1;
+
+    std::vector<int> lat;
+    long nmi_start = -1, m1_fall = 0, next_nmi = clk + 6000, nmi_fall = 0;
+    int  nmis = 0, in_handler = 0;
+    bool p_m1 = true, p_fetch = false;
+
+    for (long i = 0; i < 120000; i++) {
+        if (nmis < 12 && t->nmi_n && clk >= next_nmi) { t->nmi_n = 0; nmi_fall = clk; nmis++; }
+        if (!t->nmi_n && clk >= nmi_fall + 60) { t->nmi_n = 1; next_nmi = clk + 4000; }
+        tick();
+        bool m1 = !t->m1_n, rd = !t->rd_n, mreq = !t->mreq_n;
+        if (m1 && !p_m1) m1_fall = clk;
+        p_m1 = m1;
+        // TB_NMIWAVE=1: M-cykly a T-stavy prvního potvrzení NMI
+        static const bool nmiwave = getenv("TB_NMIWAVE") != nullptr;
+        static int nw_left = 0, nw_pm = 0, nw_pt = 0;
+        if (nmiwave && nmis == 1 && nw_left == 0 && t->dbg_nmicycle) nw_left = 20;
+        if (nw_left > 0 && (t->dbg_mcycle != nw_pm || t->dbg_tstate != nw_pt) && t->dbg_ce_p) {
+            nw_left--;
+            printf("    %7ld M%d T%d  M1=%d MREQ=%d RD=%d WR=%d A=%04X nmi=%d\n", clk,
+                   t->dbg_mcycle, t->dbg_tstate, !m1, !mreq, !rd, t->wr_n, t->addr, t->dbg_nmicycle);
+        }
+        if (t->dbg_ce_p) { nw_pm = t->dbg_mcycle; nw_pt = t->dbg_tstate; }
+
+        bool fetch = m1 && mreq && rd;
+        if (fetch && !p_fetch) {
+            if (t->dbg_nmicycle) nmi_start = m1_fall;        // cyklus potvrzení NMI
+            else if (nmi_start >= 0 && t->addr == 0x0066) {
+                lat.push_back((int)((m1_fall - nmi_start) / 6));
+                nmi_start = -1; in_handler++;
+            }
+        }
+        p_fetch = fetch;
+    }
+
+    int mn = 1 << 30, mx = -1;
+    for (int v : lat) { if (v < mn) mn = v; if (v > mx) mx = v; }
+    char b[128];
+    snprintf(b, sizeof b, "(naměřeno %d..%d T, Zilog 11 T, %zu potvrzení)", mn, mx, lat.size());
+    check("7. NMI: odezva 11 T podle Zilogu", !lat.empty() && mn == 11 && mx == 11, b);
+}
+
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
     t = new Vtb_tv80;
@@ -247,9 +305,10 @@ int main(int argc, char** argv) {
 
     // IM0: řadič vystaví RST 28h (EF), IM1: sběrnice FF (ignoruje se),
     // IM2: vektory 60h/62h/64h -> obsluhy A0/A1/A2
-    run_mode({"IM0 (vektor = RST 28h)", 0x46, {0xEF},             {0xC0},             13, 12, 13});
-    run_mode({"IM1",                    0x56, {0xFF},             {0xB1},             13, 12, 13});
-    run_mode({"IM2",                    0x5E, {0x60, 0x62, 0x64}, {0xA0, 0xA1, 0xA2}, 19, 20, 21});
+    run_mode({"IM0 (vektor = RST 28h)", 0x46, {0xEF},             {0xC0},             13});
+    run_mode({"IM1",                    0x56, {0xFF},             {0xB1},             13});
+    run_mode({"IM2",                    0x5E, {0x60, 0x62, 0x64}, {0xA0, 0xA1, 0xA2}, 19});
+    run_nmi();
 
     printf("\n%s (%d chyb)\n", fails ? "NEPROSLO" : "VSE PROSLO", fails);
     delete t;

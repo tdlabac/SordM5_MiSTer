@@ -1,5 +1,7 @@
 // ZMRAŽENÁ REFERENČNÍ KOPIE rtl/CPU/tv80.sv — needitovat, generuje make_ref.sh
 // Zdroj: pracovní strom 2026-09-19
+// + 2026-09-20 vědomě přijato: cyklicky přesné potvrzení přerušení
+//   (IM0/IM1 13 T, IM2 19 T, NMI 11 T; hlídá rtl/CPU/tb/run_tb.sh bod 3 a 7)
 //
 // Z80 compatible microprocessor core
 //
@@ -172,6 +174,7 @@ module REF_TV80#( parameter Mode      = 0,
     logic               Auto_Wait;
     logic               Auto_Wait_t1;
     logic               Auto_Wait_t2;
+    logic         [1:0] IntWait;      // zbývající wait stavy potvrzení přerušení
     logic               IncDecZ;
 
     // ALU signals
@@ -931,8 +934,7 @@ module REF_TV80#( parameter Mode      = 0,
             // until T2 really ends, otherwise the last latch happens with M1
             // already high, a Z80 peripheral no longer drives its vector and
             // 0xFF is taken instead. Opcode fetch and NMI are unchanged.
-            if (MCycle == 3'd1 && TState == 3'd2 && WAIT_n &&
-                ~(IntCycle && Auto_Wait && ~Auto_Wait_t2))
+            if (MCycle == 3'd1 && TState == 3'd2 && WAIT_n && ~Auto_Wait)
                 M1_n <= '1;
 
             if (BusReq_s & BusAck) begin
@@ -969,7 +971,7 @@ module REF_TV80#( parameter Mode      = 0,
                         end else
                             MCycle <= MCycle + 3'd1;
                     end
-                end else if (~((Auto_Wait & ~Auto_Wait_t2) || (IOWait == 1 & IORQ_i & ~Auto_Wait_t1)))
+                end else if (~(Auto_Wait || (IOWait == 1 & IORQ_i & ~Auto_Wait_t1)))
                     TState <= TState + 3'd1;
             end
 
@@ -978,14 +980,19 @@ module REF_TV80#( parameter Mode      = 0,
         end
     end
 
-    always_comb begin
-        Auto_Wait = '0;
-        if (IntCycle || NMICycle) begin
-            if (MCycle == 3'd1) begin
-                Auto_Wait = '1;
-            end
+    always_ff @(negedge RESET_n or posedge CLK_n) begin
+        if (~RESET_n)
+            IntWait <= 2'd2;
+        else if (CEN) begin
+            if (~(IntCycle && MCycle == 3'd1))
+                IntWait <= 2'd2;
+            else if (TState == 3'd2 && WAIT_n && IntWait != 2'd0)
+                IntWait <= IntWait - 2'd1;
         end
     end
+
+    always_comb
+        Auto_Wait = IntCycle && MCycle == 3'd1 && TState == 3'd2 && IntWait != 2'd0;
 
 
 endmodule

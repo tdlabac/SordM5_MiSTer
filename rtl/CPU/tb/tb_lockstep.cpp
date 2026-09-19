@@ -109,7 +109,11 @@ int main(int argc, char** argv) {
          tick();
          if (!(t->d_ctl & 0x02)) halts++;
 
-         bool bnd = t->d_mc == 1 && t->d_ts == 2 && t->d_prefix == 0;
+         // Hranice instrukce jako v debuggeru (rtl/CPU/tv80_dbg.sv): potvrzení
+         // přerušení se vynechává. DIRSet totiž nastavuje i A <= PC, a uprostřed
+         // potvrzení je na adrese obnovovací adresa {I,R}, ne PC.
+         bool bnd = t->d_mc == 1 && t->d_ts == 2 && t->d_prefix == 0 &&
+                    !t->d_intcycle && !t->d_nmicycle;
          if (mode && bnd && !prev_bnd && t->run) {
             // DIRSet jen při stojícím CE: nejpozději takt před rozběhem
             t->run = 0; frozen = 2 + rng() % 8; dirset_at = 2 + rng() % (frozen - 1); stops++;

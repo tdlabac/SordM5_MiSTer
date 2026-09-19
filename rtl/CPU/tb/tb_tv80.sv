@@ -14,6 +14,7 @@ module tb_tv80 (
    input  logic [7:0]  rom_d,
 
    input  logic        int_n,
+   input  logic        nmi_n,
    input  logic [7:0]  vec,
    input  logic [7:0]  io_rd_val,
 
@@ -34,7 +35,8 @@ module tb_tv80 (
    output logic [7:0]  dbg_di_reg,
    output logic        dbg_intcycle,
    output logic        dbg_ce_p,
-   output logic        dbg_ce_n
+   output logic        dbg_ce_n,
+   output logic        dbg_nmicycle
 );
    logic [2:0] div6 = '0;
    always_ff @(posedge clk) div6 <= (div6 == 3'd5) ? 3'd0 : div6 + 3'd1;
@@ -47,11 +49,11 @@ module tb_tv80 (
 
    TV80a #(.Mode(0), .R800_MULU(0), .IOWait(1)) cpu (
       .RESET_n(rst_n), .R800_mode(1'b0), .CLK_n(clk), .CE_n(ce_n), .CE_p(ce_p),
-      .WAIT_n(1'b1), .INT_n(int_n), .NMI_n(1'b1), .BUSRQ_n(1'b1),
+      .WAIT_n(1'b1), .INT_n(int_n), .NMI_n(nmi_n), .BUSRQ_n(1'b1),
       .M1_n(M1_n), .MREQ_n(MREQ_n), .IORQ_n(IORQ_n), .RD_n(RD_n), .WR_n(WR_n),
       .RFSH_n(), .HALT_n(), .BUSAK_n(), .A(A), .DI(DI), .DO(DO),
       .REG(), .DIRSet(1'b0), .DIR('0), .DbgMCycle(), .DbgTState(), .DbgPrefix(),
-      .DbgIntCycle(), .DbgNMICycle()
+      .DbgIntCycle(), .DbgNMICycle(dbg_nmicycle)
    );
 
    // ROM 0x0000-0x00FF (zrcadlí se do 0x7FFF), RAM 0x8000-0x80FF (zrcadlí se do 0xFFFF)

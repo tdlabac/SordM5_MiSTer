@@ -31,6 +31,8 @@ module tb_lockstep (
    output logic [2:0]   d_mc,
    output logic [2:0]   d_ts,
    output logic [1:0]   d_prefix,
+   output logic         d_intcycle,
+   output logic         d_nmicycle,
 
    // DUT
    output logic [15:0] d_a,
@@ -65,13 +67,14 @@ module tb_lockstep (
       .RFSH_n(dRFSH), .HALT_n(dHALT), .BUSAK_n(dBUSAK), .A(dA), .DI(DI), .DO(dDO)
 `ifndef DUT_DBG
       , .REG(d_reg), .DIRSet(dirset), .DIR(dir), .DbgMCycle(d_mc), .DbgTState(d_ts),
-      .DbgPrefix(d_prefix), .DbgIntCycle(), .DbgNMICycle()
+      .DbgPrefix(d_prefix), .DbgIntCycle(d_intcycle), .DbgNMICycle(d_nmicycle)
 `else
       , .freeze(), .dbg_i('0), .dbg_o()
 `endif
    );
 `ifdef DUT_DBG
    assign d_reg = '0; assign d_mc = '0; assign d_ts = '0; assign d_prefix = '0;
+   assign d_intcycle = '0; assign d_nmicycle = '0;
 `endif
 
    REF_TV80a #(.Mode(0), .R800_MULU(0), .IOWait(1)) ref_cpu (

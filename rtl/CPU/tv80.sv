@@ -185,6 +185,7 @@ module TV80#( parameter Mode      = 0,
     logic               Auto_Wait;
     logic               Auto_Wait_t1;
     logic               Auto_Wait_t2;
+    logic         [1:0] IntWait;      // zbývající wait stavy potvrzení přerušení
     logic               IncDecZ;
 
     // ALU signals
@@ -1000,8 +1001,7 @@ module TV80#( parameter Mode      = 0,
             // until T2 really ends, otherwise the last latch happens with M1
             // already high, a Z80 peripheral no longer drives its vector and
             // 0xFF is taken instead. Opcode fetch and NMI are unchanged.
-            if (MCycle == 3'd1 && TState == 3'd2 && WAIT_n &&
-                ~(IntCycle && Auto_Wait && ~Auto_Wait_t2))
+            if (MCycle == 3'd1 && TState == 3'd2 && WAIT_n && ~Auto_Wait)
                 M1_n <= '1;
 
             if (BusReq_s & BusAck) begin
@@ -1038,7 +1038,7 @@ module TV80#( parameter Mode      = 0,
                         end else
                             MCycle <= MCycle + 3'd1;
                     end
-                end else if (~((Auto_Wait & ~Auto_Wait_t2) || (IOWait == 1 & IORQ_i & ~Auto_Wait_t1)))
+                end else if (~(Auto_Wait || (IOWait == 1 & IORQ_i & ~Auto_Wait_t1)))
                     TState <= TState + 3'd1;
             end
 
@@ -1047,14 +1047,30 @@ module TV80#( parameter Mode      = 0,
         end
     end
 
-    always_comb begin
-        Auto_Wait = '0;
-        if (IntCycle || NMICycle) begin
-            if (MCycle == 3'd1) begin
-                Auto_Wait = '1;
-            end
+    // Potvrzení přerušení: Zilog vkládá do cyklu M1 dva wait stavy, takže
+    // odezva je 13 T (IM0/IM1) a 19 T (IM2). NMI wait stavy nemá (11 T).
+    //
+    // Dřív Auto_Wait platil po celý M1 a zdržení se počítalo přes
+    // Auto_Wait_t1/t2. Ty si ale nesou hodnotu z předchozího cyklu (nastavuje
+    // je i IORQ_i), takže po IN/OUT vyšel jeden wait stav místo dvou a délka
+    // potvrzení kolísala. Teď se wait stavy počítají čítačem.
+    // DIRSet (zápis registrů debuggerem) se vynechává stejně jako v hlavním
+    // stavovém automatu, jinak by čítač běžel i v taktu, kdy automat stojí.
+    always_ff @(negedge RESET_n or posedge CLK_n) begin
+        if (~RESET_n)
+            IntWait <= 2'd2;
+        else if (DIRSet)
+            IntWait <= 2'd2;
+        else if (CEN) begin
+            if (~(IntCycle && MCycle == 3'd1))
+                IntWait <= 2'd2;
+            else if (TState == 3'd2 && WAIT_n && IntWait != 2'd0)
+                IntWait <= IntWait - 2'd1;
         end
     end
+
+    always_comb
+        Auto_Wait = IntCycle && MCycle == 3'd1 && TState == 3'd2 && IntWait != 2'd0;
 
 
 endmodule

@@ -764,20 +764,27 @@ module TV80_MCode #(
                     end
                     8'b00000000: begin                                  // NMI || INT (IM2) || NOP
                         if (NMICycle) begin
-                            MCycles = 3'd5;
+                            // NMI má tři M-cykly (M1 + dva zápisy PC); dřív
+                            // tu bylo 5 jako u IM2 a M4/M5 dělaly zbytečná
+                            // čtení, takže odezva byla 17 T místo 11.
+                            MCycles = 3'd3;
                             case (MCycle)                               // NMI
+                                // Uložení PC jsou běžné zápisy po 3 T (jako RST p),
+                                // NMI tak trvá 11 T podle Zilogu.
                                 3'd1: begin TStates = 3'd5; IncDec_16 = 4'b1111; Set_Addr_To = aSP; Set_BusB_To = 4'b1101; end
-                                3'd2: begin TStates = 3'd4; Write = '1; IncDec_16 = 4'b1111; Set_Addr_To = aSP;  Set_BusB_To = 4'b1100; end
-                                3'd3: begin TStates = 3'd4; Write = '1; end
+                                3'd2: begin Write = '1; IncDec_16 = 4'b1111; Set_Addr_To = aSP;  Set_BusB_To = 4'b1100; end
+                                3'd3: begin Write = '1; end
                                 default: ;
                             endcase
                         end else begin
                             if (IntCycle) begin
                                 MCycles = 3'd5;
                                 case (MCycle)                               // NMI
+                                    // IM2: M1 (5 T + 2 wait) + 3 + 3 (uložení PC)
+                                    // + 3 + 3 (vektor) = 19 T podle Zilogu.
                                     3'd1: begin TStates = 3'd5; LDZ = '1; IncDec_16 = 4'b1111; Set_Addr_To = aSP; Set_BusB_To = 4'b1101; end
-                                    3'd2: begin TStates = 3'd4; Write = '1; IncDec_16 = 4'b1111; Set_Addr_To = aSP;  Set_BusB_To = 4'b1100; end
-                                    3'd3: begin TStates = 3'd4; Write = '1; end
+                                    3'd2: begin Write = '1; IncDec_16 = 4'b1111; Set_Addr_To = aSP;  Set_BusB_To = 4'b1100; end
+                                    3'd3: begin Write = '1; end
                                     3'd4: begin Inc_PC = '1; LDZ = '1; end
                                     3'd5: Jump = '1;
                                     default: ;

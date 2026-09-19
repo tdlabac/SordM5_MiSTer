@@ -167,9 +167,15 @@ class Z80Debugger:
 
     # --- breakpointy
     def set_bp(self, i, kind, addr, amask=0xFFFF, data=0, dmask=0):
+        # Registry se zapisují po bajtech a breakpoint porovnává hned. Druh se
+        # proto zapisuje až nakonec a předtím se breakpoint vypne: jinak by
+        # mezi zápisy platil nový druh se starou adresou/maskou (po resetu
+        # maska 0000 = každá adresa) a počítač by se zastavil kdekoli.
         base = R_BP + 8 * i
-        for k, v in enumerate([kind, addr & 0xFF, addr >> 8, amask & 0xFF, amask >> 8, data, dmask]):
+        self.write_reg(base, 0)
+        for k, v in enumerate([addr & 0xFF, addr >> 8, amask & 0xFF, amask >> 8, data, dmask], 1):
             self.write_reg(base + k, v)
+        self.write_reg(base, kind)
 
     def clear_bp(self, i):
         self.write_reg(R_BP + 8 * i, 0)
