@@ -60,7 +60,15 @@ module tv80_dbg #(
         .BUSAK_n(BUSAK_n),
         .A(A),
         .DI(DI),
-        .DO(DO)
+        .DO(DO),
+        .REG(),
+        .DIRSet(1'b0),
+        .DIR('0),
+        .DbgMCycle(),
+        .DbgTState(),
+        .DbgPrefix(),
+        .DbgIntCycle(),
+        .DbgNMICycle()
     );
 
 endmodule

@@ -87,7 +87,17 @@ module TV80a#(
     output          BUSAK_n,
     output   [15:0] A,
     input     [7:0] DI,
-    output    [7:0] DO
+    output    [7:0] DO,
+
+    // Debugger (doc/z80-debugger.md), rozložení REG/DIR viz tv80.sv
+    output  [211:0] REG,
+    input           DIRSet,
+    input   [211:0] DIR,
+    output    [2:0] DbgMCycle,
+    output    [2:0] DbgTState,
+    output    [1:0] DbgPrefix,
+    output          DbgIntCycle,
+    output          DbgNMICycle
 );
 
     logic           Reset_s;
@@ -165,8 +175,19 @@ module TV80a#(
         .MC(MCycle),
         .TS(TState),
         .IntCycle_n(IntCycle_n),
-        .R800_mode(R800_mode)
+        .R800_mode(R800_mode),
+        .IntE(),
+        .Stop(),
+        .REG(REG),
+        .DIRSet(DIRSet),
+        .DIR(DIR),
+        .DbgPrefix(DbgPrefix),
+        .DbgNMICycle(DbgNMICycle)
     );
+
+    assign DbgMCycle   = MCycle;
+    assign DbgTState   = TState;
+    assign DbgIntCycle = ~IntCycle_n;
 
     always_ff @(posedge CLK_n) begin
         if (CE_n) begin

@@ -214,6 +214,7 @@ static void run_mode(const Mode& m) {
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
     t = new Vtb_tv80;
+    t->clk = 0; t->eval();      // první eval je inicializace, hranu by nechytil
 
     // IM0: řadič vystaví RST 28h (EF), IM1: sběrnice FF (ignoruje se),
     // IM2: vektory 60h/62h/64h -> obsluhy A0/A1/A2

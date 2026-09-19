@@ -103,7 +103,22 @@ module TV80#( parameter Mode      = 0,
     output              IntCycle_n,
     input               R800_mode,
     output              IntE,
-    output              Stop
+    output              Stop,
+
+    // Debugger (doc/z80-debugger.md). Nepřipojené REG a DIRSet = 0 se
+    // vyoptimalizují, chování procesoru se nemění.
+    //   REG/DIR  [7:0] A      [15:8] F      [23:16] A'   [31:24] F'
+    //            [39:32] I    [47:40] R     [63:48] SP   [79:64] PC
+    //            [95:80] BC   [111:96] DE   [127:112] HL
+    //            [143:128] BC' [159:144] DE' [175:160] HL'
+    //            [191:176] IX [207:192] IY  [208] IFF1   [209] IFF2
+    //            [211:210] IM
+    // DIRSet (1 takt, při zastaveném CEN) nahraje DIR a A <= PC z DIR.
+    output      [211:0] REG,
+    input               DIRSet,
+    input       [211:0] DIR,
+    output        [1:0] DbgPrefix,     // 0 = opkód v IR není prefix (hranice instrukce)
+    output              DbgNMICycle
 );
 
     localparam          aNone = 3'b111;
@@ -623,6 +638,22 @@ module TV80#( parameter Mode      = 0,
                         DO <= ALU_Q;
                 end
             end
+
+            // Debugger: nahrání registrů. Alternate se nemění: adresy banky
+            // (RegAddrA_r/B_r/C) jsou registrované s jeho dnešní hodnotou,
+            // proto se sady zapisují na fyzické indexy podle Alternate.
+            if (DIRSet) begin
+                ACC       <= DIR[7:0];
+                F         <= DIR[15:8];
+                Ap        <= DIR[23:16];
+                Fp        <= DIR[31:24];
+                I         <= DIR[39:32];
+                R         <= DIR[47:40];
+                SP        <= DIR[63:48];
+                PC        <= DIR[79:64];
+                A         <= DIR[79:64];
+                IStatus   <= DIR[211:210];
+            end
         end
     end
 
@@ -779,7 +810,44 @@ module TV80#( parameter Mode      = 0,
         end
     end
 
+    // Debugger: architektonický pohled na banku. Fyzicky {Alternate, pár},
+    // pár 0 = BC, 1 = DE, 2 = HL; IX na indexu 3, IY na 7.
+    logic [127:0] RegsAll;
+    logic  [15:0] RegPhys[8];
+    always_comb
+        for (int i = 0; i < 8; i++) RegPhys[i] = RegsAll[16*i +: 16];
+
+    assign REG[31:0]    = {Fp, Ap, F, ACC};
+    assign REG[47:32]   = {R, I};
+    assign REG[79:48]   = {PC, SP};
+    assign REG[95:80]   = RegPhys[{Alternate, 2'b00}];
+    assign REG[111:96]  = RegPhys[{Alternate, 2'b01}];
+    assign REG[127:112] = RegPhys[{Alternate, 2'b10}];
+    assign REG[143:128] = RegPhys[{~Alternate, 2'b00}];
+    assign REG[159:144] = RegPhys[{~Alternate, 2'b01}];
+    assign REG[175:160] = RegPhys[{~Alternate, 2'b10}];
+    assign REG[191:176] = RegPhys[3];
+    assign REG[207:192] = RegPhys[7];
+    // EI: TV80 nastaví IFF až v T2 dalšího M1 (SetEI se dekóduje z IR, kde
+    // je ještě FB); tak dělá zpoždění přijetí přerušení o jednu instrukci.
+    // Na Z80 jsou IFF po EI nastavené hned, proto se SetEI přičte. Omezení:
+    // DIRSet s IFF = 0 hned po EI odložené EI stejně nastaví.
+    assign REG[211:208] = {IStatus, IntE_FF2 | SetEI, IntE_FF1 | SetEI};
+
+    assign DbgPrefix   = Prefix;
+    assign DbgNMICycle = NMICycle;
+
+    // DIR -> fyzické indexy {IY, sada 1, IX, sada 0}; hlavní sada BC/DE/HL
+    // patří na {Alternate, pár}.
+    wire [47:0] DirMain = DIR[127:80];     // {HL, DE, BC}
+    wire [47:0] DirAlt  = DIR[175:128];    // {HL', DE', BC'}
+    wire [127:0] DirPhys = {DIR[207:192], Alternate ? DirMain : DirAlt,
+                            DIR[191:176], Alternate ? DirAlt  : DirMain};
+
     TV80_Reg Regs (
+        .DIRSet(DIRSet),
+        .DIR(DirPhys),
+        .REGS(RegsAll),
         .Clk(CLK_n),
         .CEN(ClkEn),
         .WEH(RegWEH),
@@ -893,6 +961,9 @@ module TV80#( parameter Mode      = 0,
             Auto_Wait_t1 <= '0;
             Auto_Wait_t2 <= '0;
             M1_n <= '1;
+        end else if (DIRSet) begin
+            IntE_FF1 <= DIR[208];
+            IntE_FF2 <= DIR[209];
         end else if (CEN) begin
             if (T_Res)
                 Auto_Wait_t1 <= '0;

@@ -23,6 +23,15 @@ module tb_lockstep (
    input  logic        busrq_n,
    input  logic [7:0]  vec,
 
+   // zmrazení a zápis registrů (jen DUT = TV80a)
+   input  logic         run,        // 0 = CE obou procesorů stojí
+   input  logic         dirset,
+   input  logic [211:0] dir,
+   output logic [211:0] d_reg,
+   output logic [2:0]   d_mc,
+   output logic [2:0]   d_ts,
+   output logic [1:0]   d_prefix,
+
    // DUT
    output logic [15:0] d_a,
    output logic [7:0]  d_do,
@@ -36,8 +45,8 @@ module tb_lockstep (
 );
    logic [2:0] div6 = '0;
    always_ff @(posedge clk) div6 <= (div6 == 3'd5) ? 3'd0 : div6 + 3'd1;
-   wire ce_p = (div6 == 3'd0);
-   wire ce_n = (div6 == 3'd3);
+   wire ce_p = run && (div6 == 3'd0);
+   wire ce_n = run && (div6 == 3'd3);
 
    logic [15:0] dA, rA;
    logic [7:0]  dDO, rDO, DI;
@@ -53,7 +62,14 @@ module tb_lockstep (
       .WAIT_n(wait_n), .INT_n(int_n), .NMI_n(nmi_n), .BUSRQ_n(busrq_n),
       .M1_n(dM1), .MREQ_n(dMREQ), .IORQ_n(dIORQ), .RD_n(dRD), .WR_n(dWR),
       .RFSH_n(dRFSH), .HALT_n(dHALT), .BUSAK_n(dBUSAK), .A(dA), .DI(DI), .DO(dDO)
+`ifndef DUT_DBG
+      , .REG(d_reg), .DIRSet(dirset), .DIR(dir), .DbgMCycle(d_mc), .DbgTState(d_ts),
+      .DbgPrefix(d_prefix), .DbgIntCycle(), .DbgNMICycle()
+`endif
    );
+`ifdef DUT_DBG
+   assign d_reg = '0; assign d_mc = '0; assign d_ts = '0; assign d_prefix = '0;
+`endif
 
    REF_TV80a #(.Mode(0), .R800_MULU(0), .IOWait(1)) ref_cpu (
       .RESET_n(rst_n), .R800_mode(1'b0), .CLK_n(clk), .CE_n(ce_n), .CE_p(ce_p),

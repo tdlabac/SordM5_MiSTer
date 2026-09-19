@@ -49,7 +49,9 @@ module tb_tv80 (
       .RESET_n(rst_n), .R800_mode(1'b0), .CLK_n(clk), .CE_n(ce_n), .CE_p(ce_p),
       .WAIT_n(1'b1), .INT_n(int_n), .NMI_n(1'b1), .BUSRQ_n(1'b1),
       .M1_n(M1_n), .MREQ_n(MREQ_n), .IORQ_n(IORQ_n), .RD_n(RD_n), .WR_n(WR_n),
-      .RFSH_n(), .HALT_n(), .BUSAK_n(), .A(A), .DI(DI), .DO(DO)
+      .RFSH_n(), .HALT_n(), .BUSAK_n(), .A(A), .DI(DI), .DO(DO),
+      .REG(), .DIRSet(1'b0), .DIR('0), .DbgMCycle(), .DbgTState(), .DbgPrefix(),
+      .DbgIntCycle(), .DbgNMICycle()
    );
 
    // ROM 0x0000-0x00FF (zrcadlí se do 0x7FFF), RAM 0x8000-0x80FF (zrcadlí se do 0xFFFF)

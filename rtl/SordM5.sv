@@ -77,7 +77,15 @@ TV80a #(.Mode(0), .R800_MULU(0), .IOWait(1)) Z80
    .BUSAK_n(),
    .A(A),
    .DI(DI),
-   .DO(DO)
+   .DO(DO),
+   .REG(),
+   .DIRSet(1'b0),
+   .DIR('0),
+   .DbgMCycle(),
+   .DbgTState(),
+   .DbgPrefix(),
+   .DbgIntCycle(),
+   .DbgNMICycle()
 );
 
 logic [7:0] DATA_CTC;

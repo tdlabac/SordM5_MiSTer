@@ -101,9 +101,15 @@ prvního M1 následující instrukce. Zastavovat se proto bude:
 MREQ/RD/M1 jsou v tu chvíli aktivní (fetch probíhá). To nevadí, paměť jen
 čte, a při přístupu debuggeru je sběrnice přepnutá multiplexorem.
 
-**Otevřené:** ověřit testem, že v tomto bodě jsou opravdu všechny zápisy
-hotové pro všechny instrukce (hlavně `EX`, `EXX`, blokové instrukce,
-`LD A,I/R`, `POP AF`).
+**Ověřeno** (`rtl/CPU/tb/run_regs.sh`): v tomto bodě jsou dopsané všechny
+registry u ALU, INC/DEC, 16bit, EX, EXX, POP AF, SCF/CPL, LD A,I/R, LD R,A,
+LDI/LDIR, DJNZ, CALL/RET, JP (HL), IN, NEG, DD/FD a DDCB. PC na hranici je
+vždy adresa začátku instrukce, prefixy se přeskakují.
+
+Jediná výjimka je **EI**: TV80 nastaví IFF až v T2 následujícího M1
+(`SetEI` se dekóduje z IR, kde je ještě FB), takhle dělá zpoždění přijetí
+přerušení. `REG` proto hlásí `IFF | SetEI`, což odpovídá Z80. Omezení:
+`DIRSet` s IFF = 0 hned po EI odložené EI stejně nastaví na 1.
 
 ## Breakpointy
 
@@ -135,13 +141,36 @@ input               DIRSet,   // 1 takt: nahrát DIR
 input        [211:0] DIR
 ```
 
-- Obsah: AF, BC, DE, HL, AF', BC', DE', HL', IX, IY, SP, PC, I, R, IFF1,
-  IFF2, IM (přesné rozložení se určí při implementaci a zdokumentuje).
-- `tv80.sv`: `assign REG`; při `DIRSet` přepsat ACC/F/Ap/Fp/SP/PC/I/R/IFF/
-  IStatus a zároveň `A <= PC`.
-- `tv80_reg.sv`: zápis celé banky při `DIRSet`, nezávisle na `CEN`.
-- `tv80a.sv`: protáhnout REG/DIRSet/DIR a výstupy MC, TS, IntCycle_n, prefix.
-- Rozsah 40–60 řádků, bez vlivu na chování při `DIRSet = 0`.
+Implementováno. Rozložení `REG`/`DIR` (bit 0 = LSB):
+
+| bity | registr | bity | registr |
+|---|---|---|---|
+| 7:0 | A | 111:96 | DE |
+| 15:8 | F | 127:112 | HL |
+| 23:16 | A' | 143:128 | BC' |
+| 31:24 | F' | 159:144 | DE' |
+| 39:32 | I | 175:160 | HL' |
+| 47:40 | R | 191:176 | IX |
+| 63:48 | SP | 207:192 | IY |
+| 79:64 | PC | 208 / 209 | IFF1 / IFF2 |
+| 95:80 | BC | 211:210 | IM |
+
+- `tv80.sv`: `REG` je architektonický pohled. Banka je fyzicky
+  `{Alternate, pár}` (0 = BC, 1 = DE, 2 = HL, IX na 3, IY na 7) a `EXX`
+  jen přepíná `Alternate`. `DIRSet` přepíše ACC/F/Ap/Fp/I/R/SP/PC/IStatus/IFF
+  a zároveň `A <= PC`, aby rozběhnutý fetch šel z nové adresy.
+- `DIRSet` **nemění `Alternate`**: adresy banky (`RegAddrA_r/B_r/C`) jsou
+  registrované s jeho dnešní hodnotou a po přepnutí by první takt četl ze
+  špatné sady (našel lockstep v režimu 2). Sady se místo toho zapisují na
+  fyzické indexy podle `Alternate`.
+- `tv80_reg.sv`: zápis celé banky při `DIRSet` (má přednost, nezávisí na
+  `CEN`) a výstup `REGS` s celou bankou. Banka se tím syntetizuje z
+  klopných obvodů místo paměti (16 B).
+- `tv80a.sv`: protahuje REG/DIRSet/DIR a výstupy `DbgMCycle`, `DbgTState`,
+  `DbgPrefix`, `DbgIntCycle`, `DbgNMICycle`.
+- `DIRSet` smí přijít jen při zastaveném CE.
+- Nepokryté: `WZ` (MEMPTR, ovlivňuje nedokumentované příznaky `BIT n,(HL)`)
+  a stav „po EI“ (drží ho IR, `DIRSet` ho nemění).
 
 ## Paměť
 
@@ -176,13 +205,17 @@ Na PC most na GDB Remote Serial Protocol (Python). Ve FPGA se RSP neřeší.
 
 ## Postup
 
-1. **Testy TV80 před změnou.** Zmrazená kopie dnešního TV80 (`rtl/CPU/tb/ref`,
-   moduly s předponou `REF_`) a lockstep test: dnešní/upravený TV80 proti
-   kopii, náhodný program, náhodné INT/NMI/WAIT/BUSRQ, porovnání všech
-   výstupů v každém taktu. Stávající `tb_tv80` (IM0/1/2) zůstává.
-2. **Obálka `tv80_dbg`** jako průchozí, lockstep proti kopii.
-3. `REG/DIRSet` v TV80 + test (snímek registrů na hranicích, zápis a ověření
-   přes PUSH na sběrnici). Lockstep musí dál projít.
+1. ✅ **Testy TV80 před změnou.** Zmrazená kopie TV80 (`rtl/CPU/tb/ref`,
+   moduly `REF_*`, generuje `make_ref.sh`) a lockstep test
+   (`run_lockstep.sh`): upravený TV80 proti kopii, náhodný program, náhodné
+   INT/NMI/WAIT/BUSRQ, porovnání A, DO a všech řídicích výstupů v každém
+   taktu. Režimy `LS_MODE`: 0 bez zásahu, 1 zmrazení CE na každé hranici,
+   2 zmrazení + `DIRSet` s vlastním `REG`. Stávající `tb_tv80` (IM0/1/2)
+   zůstává.
+2. ✅ **Obálka `tv80_dbg`** jako průchozí, lockstep proti kopii (`DUT_DBG=1`).
+3. ✅ `REG/DIRSet` v TV80 + test `run_regs.sh` (REG na každé hranici proti
+   očekávanému stavu, DIRSet v Alternate = 1, výpis PUSH na zásobník, IM/IFF
+   z DIRSet přes INT). Lockstep ve všech režimech prochází.
 4. `freeze` v `clock.sv`, místo zastavení, krok. Test: běh se zastaveními
    musí dát stejný průběh jako běh bez nich (lockstep s posunem času).
 5. Breakpointy, přístup k paměti, registrový prostor, DPI přenos, GUI

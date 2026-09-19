@@ -70,14 +70,25 @@ module TV80_Reg (
     output    [7:0] DOBH,
     output    [7:0] DOBL,
     output    [7:0] DOCH,
-    output    [7:0] DOCL
+    output    [7:0] DOCL,
+
+    // Debugger (doc/z80-debugger.md): celá banka naráz, fyzické indexy,
+    // registr i = {H,L} na [16*i +: 16]. DIRSet má přednost a nezávisí na CEN.
+    input           DIRSet,
+    input   [127:0] DIR,
+    output  [127:0] REGS
 );
 
     typedef logic [7:0] Register_Image[8];
     Register_Image RegsH, RegsL;
 
     always_ff @( posedge Clk ) begin
-        if ( CEN ) begin
+        if ( DIRSet ) begin
+            for (int i = 0; i < 8; i++) begin
+                RegsH[i] <= DIR[16*i+8 +: 8];
+                RegsL[i] <= DIR[16*i   +: 8];
+            end
+        end else if ( CEN ) begin
             if ( WEH ) begin
                 RegsH[AddrA] <= DIH;
             end
@@ -86,6 +97,13 @@ module TV80_Reg (
             end
         end
     end
+
+    genvar gi;   // Quartus 17 nezná genvar uvnitř for
+    generate
+        for (gi = 0; gi < 8; gi++) begin : g_regs
+            assign REGS[16*gi +: 16] = {RegsH[gi], RegsL[gi]};
+        end
+    endgenerate
 
     assign DOAH = RegsH[AddrA];
     assign DOAL = RegsL[AddrA];

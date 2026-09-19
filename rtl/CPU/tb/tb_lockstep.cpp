@@ -9,7 +9,15 @@
 // opravdu provedlo), aby bylo vidět, že náhodný program instrukce prošel.
 //
 // Parametry z prostředí: LS_SEEDS (počet semínek, výchozí 16),
-// LS_CLOCKS (taktů na semínko, výchozí 2 000 000), LS_SEED0 (první semínko).
+// LS_CLOCKS (taktů na semínko, výchozí 2 000 000), LS_SEED0 (první semínko),
+// LS_MODE:
+//   0  běh bez zásahů (výchozí)
+//   1  na každé hranici instrukce zmrazí CE obou procesorů na 1..8 taktů
+//      (zmrazení nesmí nic změnit)
+//   2  jako 1 a během zmrazení DUT dostane DIRSet s vlastním REG
+//      (zápis beze změny nesmí nic změnit: REG je úplný a DIRSet nemá
+//      vedlejší účinky)
+// Hranice instrukce = M1, TState 2, Prefix 0 (doc/z80-debugger.md).
 #include "Vtb_lockstep.h"
 #include <cstdio>
 #include <cstdint>
@@ -37,10 +45,13 @@ static long env(const char* n, long d) { const char* v = getenv(n); return v ? s
 int main(int argc, char** argv) {
    Verilated::commandArgs(argc, argv);
    t = new Vtb_lockstep;
+   t->clk = 0; t->eval();        // první eval je inicializace, hranu by nechytil
 
    const long seeds  = env("LS_SEEDS", 16);
    const long clocks = env("LS_CLOCKS", 2000000);
    const long seed0  = env("LS_SEED0", 1);
+   const long mode   = env("LS_MODE", 0);
+   long stops = 0;
 
    // pokrytí: 0 = základní, 1 = CB, 2 = ED, 3 = DD/FD
    static bool seen[4][256];
@@ -50,6 +61,7 @@ int main(int argc, char** argv) {
       std::mt19937 rng((uint32_t)s);
       auto chance = [&](int n) { return (int)(rng() % (uint32_t)n) == 0; };
 
+      t->run = 1; t->dirset = 0;
       t->rst_n = 0; t->int_n = 1; t->nmi_n = 1; t->wait_n = 1; t->busrq_n = 1; t->vec = 0xFF;
       for (int a = 0; a < 65536; a++) {
          // HALT (76h) jen v 1/16 výskytů, jinak by náhodný program většinu času stál
@@ -63,6 +75,7 @@ int main(int argc, char** argv) {
 
       int int_hold = 0, nmi_left = 0, wait_left = 0, busrq_left = 0;
       int page = 0; bool in_fetch = false; uint8_t last_di = 0;
+      int frozen = 0, dirset_at = -1; bool prev_bnd = false;
 
       for (long i = 0; i < clocks; i++) {
          // --- náhodné vstupy
@@ -86,8 +99,22 @@ int main(int argc, char** argv) {
          if (busrq_left) { if (--busrq_left == 0) t->busrq_n = 1; }
          else if (chance(20000)) { t->busrq_n = 0; busrq_left = 1 + rng() % 200; busrqs++; }
 
+         // --- zmrazení (LS_MODE 1/2)
+         t->dirset = 0;
+         if (frozen > 0) {
+            if (mode == 2 && frozen == dirset_at) { t->dir = t->d_reg; t->dirset = 1; }
+            if (--frozen == 0) t->run = 1;
+         }
+
          tick();
          if (!(t->d_ctl & 0x02)) halts++;
+
+         bool bnd = t->d_mc == 1 && t->d_ts == 2 && t->d_prefix == 0;
+         if (mode && bnd && !prev_bnd && t->run) {
+            // DIRSet jen při stojícím CE: nejpozději takt před rozběhem
+            t->run = 0; frozen = 2 + rng() % 8; dirset_at = 2 + rng() % (frozen - 1); stops++;
+         }
+         prev_bnd = bnd;
 
          hist[hpos] = {clk, t->d_a, t->r_a, t->d_do, t->r_do, t->d_ctl, t->r_ctl, t->di};
          hpos = (hpos + 1) % 24;
@@ -128,6 +155,7 @@ int main(int argc, char** argv) {
           cnt[0], cnt[1], cnt[2], cnt[3], fetches);
    printf("Podněty: INT %ld, NMI %ld, WAIT %ld, BUSRQ %ld; v HALT %.1f %% taktů\n",
           ints, nmis, waits, busrqs, 100.0 * halts / ((double)clocks * seeds));
+   if (mode) printf("Zastavení na hranici instrukce: %ld%s\n", stops, mode == 2 ? " (každé s DIRSet)" : "");
    printf("\nVSE PROSLO\n");
    delete t;
    return 0;
