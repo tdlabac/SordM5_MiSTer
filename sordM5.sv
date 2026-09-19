@@ -120,7 +120,40 @@ pll pll_i
 logic [7:0] video_R, video_G, video_B;
 logic       video_HS_n, video_VS_n, video_hblank, video_vblank, video_blank_n, video_ce_pix;
 logic       TMS_interrupt_n;
-SordM5 sordm5_i
+
+// Debugger Z80 (doc/z80-debugger.md). Zatim jen v simulaci: dbg_link tam
+// nahrazuje DPI most do sim appky, ve FPGA je to pahyl a debugger je vypnuty.
+`ifdef SIMULATION
+localparam DEBUG = 1;
+`else
+localparam DEBUG = 0;
+`endif
+tv80_dbg_pkg::dbg_in_t dbg_i;
+wire       dbg_wr;
+wire [7:0] dbg_addr, dbg_wdata, dbg_rdata;
+
+dbg_link dbg_link_i
+(
+	.clk(clk_sys),
+	.wr(dbg_wr),
+	.addr(dbg_addr),
+	.wdata(dbg_wdata),
+	.rdata(dbg_rdata)
+);
+
+tv80_dbg_regs dbg_regs_i
+(
+	.clk(clk_sys),
+	.reset(RESET),                     // breakpointy preziji reset jadra
+	.wr(dbg_wr),
+	.addr(dbg_addr),
+	.wdata(dbg_wdata),
+	.rdata(dbg_rdata),
+	.dbg_i(dbg_i),
+	.dbg_o(dbg_o)
+);
+
+SordM5 #(.DEBUG(DEBUG)) sordm5_i
 (
 	.clk_sys(clk_sys),
 	.reset(reset),
@@ -140,8 +173,7 @@ SordM5 sordm5_i
 	.video_ce_pix(video_ce_pix),
 	.audio(audio),
 
-	// debugger zatim bez prenosu ven (doc/z80-debugger.md), DEBUG = 0
-	.dbg_i('0),
+	.dbg_i(dbg_i),
 	.dbg_o(dbg_o)
 );
 

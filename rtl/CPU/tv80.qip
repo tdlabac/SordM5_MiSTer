@@ -4,3 +4,4 @@ set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) t
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) tv80_reg.sv ]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) tv80a.sv ]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) tv80_dbg.sv ]
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) tv80_dbg_regs.sv ]

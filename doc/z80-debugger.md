@@ -246,5 +246,12 @@ Na PC most na GDB Remote Serial Protocol (Python). Ve FPGA se RSP neřeší.
    `rtl/tb/run_freeze.sh` rozšířený o breakpointy, čtení paměti (kontrola
    proti ROM a RAM) a zápis přečtené hodnoty zpět; 3 semínka × 6 M taktů,
    každé ~11 000 zastavení breakpointem a ~45 000 čtení, bez rozdílu.
-5b. Registrový prostor, DPI přenos, ovládání v simulaci.
+5b. ✅ Registrový prostor `rtl/CPU/tv80_dbg_regs.sv` (mapa v hlavičce
+   souboru), přenos `rtl/dbg_link.sv` (ve FPGA pahýl), v simulaci DPI
+   náhrada `verilator/rtl/dbg_link_dpi.sv` → třída `Z80Dbg`
+   (`verilator/sim/modules/Z80dbg.*`) → panel „Z80 debugger“ v sim appce
+   (menu Debug: stav, Stop/Run/Step/Step×N, INT při kroku, editace
+   registrů, 9 breakpointů, paměť). V kořeni `sordM5.sv` je
+   `DEBUG = 1` jen s `SIMULATION` (define ze `sordM5.sh`). End-to-end
+   test `rtl/CPU/tb/run_link.sh` pouští tutéž třídu `Z80Dbg` ve WSL.
 6. UART, případně DDR.

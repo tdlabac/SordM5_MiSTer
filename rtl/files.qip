@@ -8,4 +8,5 @@ set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) b
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) rom_ioctl.sv                             ]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) KEYBOARD/keyboard.sv                     ]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) GA015/ga015.sv                           ]
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) dbg_link.sv                              ]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) EXT/ext_bus.sv                           ]
