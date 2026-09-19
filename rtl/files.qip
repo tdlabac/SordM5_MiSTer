@@ -1,6 +1,7 @@
 set_global_assignment -name QIP_FILE           [file join $::quartus(qip_path) CPU/tv80.qip                             ]
 set_global_assignment -name QIP_FILE           [file join $::quartus(qip_path) VDP/vdp18.qip                            ]
 set_global_assignment -name QIP_FILE           [file join $::quartus(qip_path) CTC/ctc.qip                              ]
+set_global_assignment -name QIP_FILE           [file join $::quartus(qip_path) SOUND/jt89/syn/quartus/jt89_verilog.qip  ]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) sordM5.sv                                ]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) clock.sv                                 ]
 set_global_assignment -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) bram.sv                                  ]

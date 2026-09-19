@@ -41,9 +41,10 @@ assign HDMI_FREEZE = 0;
 assign HDMI_BLACKOUT = 0;
 assign HDMI_BOB_DEINT = 0;
 
-assign AUDIO_S = 0;
-assign AUDIO_L = 0;
-assign AUDIO_R = 0;
+wire signed [10:0] audio;
+assign AUDIO_S = 1;                  // signed
+assign AUDIO_L = {audio, 5'b0};
+assign AUDIO_R = {audio, 5'b0};
 assign AUDIO_MIX = 0;
 
 assign LED_DISK = 0;
@@ -134,7 +135,8 @@ SordM5 sordm5_i
     .video_hblank(video_hblank),
     .video_vblank(video_vblank),
     .video_blank_n(video_blank_n),
-	.video_ce_pix(video_ce_pix)
+	.video_ce_pix(video_ce_pix),
+	.audio(audio)
 );
 
 /////////////////  VIDEO  /////////////////

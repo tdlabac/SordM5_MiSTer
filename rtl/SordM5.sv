@@ -37,7 +37,8 @@ module SordM5
    output                   video_hblank,
    output                   video_vblank,
    output                   video_blank_n,
-   output                   video_ce_pix
+   output                   video_ce_pix,
+   output  signed [10:0]    audio
 );
 
 logic ce_3m58_p, ce_3m58_n, ce_10m7_n, ce_10m7_p;
@@ -111,7 +112,7 @@ ctc ctc_i
    .zc_to     ()
 );
 
-logic CE_CTC_n, CE_ROM0_n, CE_ROM1_n, CE_ROM2_n, CE_RAM0_n, CE_RAM1_n, MRD_n, MWR_n, CE_KB_n, CE_VDP_RD_n, CE_VDP_WR_n;
+logic CE_CTC_n, CE_SGC_n, CE_ROM0_n, CE_ROM1_n, CE_ROM2_n, CE_RAM0_n, CE_RAM1_n, MRD_n, MWR_n, CE_KB_n, CE_VDP_RD_n, CE_VDP_WR_n;
 ga015 ga015_i
 (
    .A(A),
@@ -130,7 +131,23 @@ ga015 ga015_i
    .CSR_n(CE_VDP_RD_n),
    .CSW_n(CE_VDP_WR_n),
    .KB_n(CE_KB_n),
-   .CTC_n(CE_CTC_n)
+   .CTC_n(CE_CTC_n),
+   .SGC_n(CE_SGC_n)
+);
+
+// Zvukovy cip SN76489 (jt89) — port 0x20, jen zapis, takt 3.58 MHz jako CPU.
+// jt89 zapisuje na nabezne hrane cs_n=0 && wr_n=0, cist z nej nejde.
+// READY (vypinani CPU pri zapisu) zatim nezapojeno, WAIT_n CPU je '1.
+jt89 sgc_i
+(
+   .rst(reset),
+   .clk(clk_sys),
+   .clk_en(ce_3m58_p),
+   .wr_n(WR_n),
+   .cs_n(CE_SGC_n),
+   .din(DO),
+   .sound(audio),
+   .ready()
 );
 
 logic vram_we;
