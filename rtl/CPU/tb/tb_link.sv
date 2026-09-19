@@ -20,7 +20,7 @@ module tb_link
 );
    logic ce_p, ce_n, freeze;
    clock clock_i (.reset(reset), .clk_sys(clk), .freeze(freeze),
-                  .ce_3m58_p(ce_p), .ce_3m58_n(ce_n), .ce_10m7_p(), .ce_10m7_n());
+                  .ce_3m58_p(ce_p), .ce_3m58_n(ce_n), .ce_10m7_p());
 
    dbg_in_t  di;
    dbg_out_t dout;

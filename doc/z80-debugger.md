@@ -42,7 +42,7 @@ i v simulaci Verilatorem, s co nejmenším zásahem do TV80.
 ```
 
 - **`tv80_dbg`** je obálka kolem `TV80a` se stejnými porty sběrnice a navíc
-  debug rozhraním. V `SordM5.sv` nahradí `TV80a`.
+  debug rozhraním. V `rtl/sordm5_core.sv` nahradí `TV80a`.
 - Parametr `DEBUG` na obálce: `generate` buď s debuggerem, nebo jen holé
   `TV80a` (produkční build bez debuggeru). Porty TV80 se makry neřídí.
 
@@ -68,15 +68,16 @@ Co je potřeba ohlídat:
     sběrnici vyrobit I/O cyklus na CTC.
   - jt89: `last_csn` na `clk_sys`, stejné pravidlo.
   - VDP: ověřit, že vše běží na `clk_en_10m7`.
-- **Vnější vstupy během zmrazení:**
-  - klávesnice (PS/2 z HPS): stisk se zapíše hned. Zvážit frontu nebo CE
-    i pro `keyboard`, aby se změna projevila až po rozběhu;
-  - ioctl (nahrávání ROM): při zmrazení zakázat, nebo brát jako reset.
+- **Vnější vstupy během zmrazení:** klávesnice (PS/2 z HPS) se zapíše hned,
+  i když počítač stojí. Odpovídá to realitě (klávesu jde stisknout
+  i na zastaveném stroji), nic se nefrontuje. Nahrání ROM přes ioctl drží
+  reset jádra a ten zastavení zruší.
 - **Video:** zmrazené VDP negeneruje synchronizaci. Na HDMI použít
   `HDMI_FREEZE = 1` (framework drží poslední snímek). Analogový výstup
   synchronizaci ztratí, to je přijatelné.
-- **Zvuk:** jt89 drží poslední vzorek, jde o stejnosměrnou složku. Při
-  zmrazení ztlumit, aby nebylo slyšet cvaknutí.
+- **Zvuk:** při zastavení (`dbg_stopped`) kořen posílá na `AUDIO_L/R`
+  ticho. jt89 stojí a jinak by držel poslední vzorek (stejnosměrná
+  složka). Zastavený obraz, zastavený zvuk.
 - **Přístupy debuggeru na sběrnici:** pro paměť jen MREQ, nikdy IORQ, a
   M1_n = 1. I/O přístup debuggerem vnáší stav (stavový registr VDP,
   klávesnice, CTC), proto jen jako výslovný příkaz s varováním.
@@ -218,9 +219,9 @@ Na PC most na GDB Remote Serial Protocol (Python). Ve FPGA se RSP neřeší.
    z DIRSet přes INT). Lockstep ve všech režimech prochází.
 4. ✅ `freeze` v `clock.sv`, zastavení na hranici a krok v `tv80_dbg`
    (`DEBUG = 1`, porty `dbg_stop/step/dirset/dir/stopped/reg` vyvedené ze
-   `SordM5`, v kořeni zatím uzemněné, `HDMI_FREEZE = dbg_stopped`).
+   `sordm5_core`, v kořeni zatím uzemněné, `HDMI_FREEZE = dbg_stopped`).
    `freeze` naskočí takt clk_sys po hraně CE_p, která hranici vytvořila.
-   Test `rtl/tb/run_freeze.sh`: dvě instance celého `SordM5` z monitor ROM
+   Test `rtl/tb/run_freeze.sh`: dvě instance celého `sordm5_core` z monitor ROM
    a BASIC-I, instance a se náhodně zastavuje, krokuje a dostává DIRSet,
    instance b dostává takt jen když a nestojí. Video, zvuk, sběrnice CPU
    a registry se shodují v každém taktu, RAM a VRAM na konci. Samotest:
@@ -229,7 +230,7 @@ Na PC most na GDB Remote Serial Protocol (Python). Ve FPGA se RSP neřeší.
    klávesnice bez vstupu).
 5a. ✅ Breakpointy, krok s maskou INT, přístup do paměti. Rozhraní je
    `tv80_dbg_pkg::dbg_in_t` / `dbg_out_t` (`rtl/CPU/tv80_dbg_pkg.sv`), ze
-   `SordM5` vede ven jako `dbg_i` / `dbg_o`. Ovládání pulzy `stop`, `run`,
+   `sordm5_core` vede ven jako `dbg_i` / `dbg_o`. Ovládání pulzy `stop`, `run`,
    `step` (zastavení drží, dokud nepřijde `run`/`step`, i když ho způsobil
    breakpoint). Rozhodnutí při implementaci:
    - M1 potvrzení INT/NMI **není** hranice (zastavení uprostřed potvrzení

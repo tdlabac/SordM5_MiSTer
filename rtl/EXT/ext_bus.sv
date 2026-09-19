@@ -85,17 +85,17 @@ assign ROMDS_n = 1'b1;
 assign EXINT_n = 1'b1;
 assign audio   = 16'sd0;
 
-assign D_i = DATA_ROM_CART;
+assign D_i = data_rom_cart;
 
 // cartrige ROM
-logic [7:0] DATA_ROM_CART;
+logic [7:0] data_rom_cart;
 // Cartridge ROM; ioctl index 1 = první soubor z menu (F1).
 rom_ioctl #(.addr_width(13),.mem_name("ROM_CART"),.IOCTL_INDEX(1)) rom_cart
 (
    .clock(clk_sys),
    .ioctl(ioctl),
    .address(A[12:0]),
-   .q(DATA_ROM_CART),
+   .q(data_rom_cart),
    .cs(!ROM1_n),
    .oe(!MRD_n)
 );

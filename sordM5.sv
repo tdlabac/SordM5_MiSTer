@@ -25,6 +25,11 @@ module emu
 	`include "sys/emu_ports.vh"
 );
 
+// default_nettype none az za hlavickou: vstupni port bez druhu (i s datovym
+// typem, napr. struct) je podle LRM net vychoziho typu, pod `none` by byl
+// chybou. Telo modulu je chranene (preklep v zapojeni nevyrobi implicitni net).
+`default_nettype none
+
 ///////// Default values for ports not used in this core /////////
 
 assign ADC_BUS  = 'Z;
@@ -44,9 +49,11 @@ assign HDMI_BLACKOUT = 0;
 assign HDMI_BOB_DEINT = 0;
 
 wire signed [15:0] audio;
+// Debugger zastavil pocitac: zastaveny obraz (HDMI_FREEZE) i zvuk (ticho).
+// Zvukovy cip stoji a drzel by posledni vzorek (stejnosmerna slozka).
 assign AUDIO_S = 1;                  // signed
-assign AUDIO_L = audio;
-assign AUDIO_R = audio;
+assign AUDIO_L = dbg_stopped ? 16'sd0 : audio;
+assign AUDIO_R = dbg_stopped ? 16'sd0 : audio;
 assign AUDIO_MIX = 0;
 
 assign LED_DISK = 0;
@@ -114,12 +121,11 @@ wire clk_sys;
 pll pll_i
 (
 	.refclk(CLK_50M),
-	.rst(0),
+	.rst(1'b0),
 	.outclk_0(clk_sys)
 );
-logic [7:0] video_R, video_G, video_B;
-logic       video_HS_n, video_VS_n, video_hblank, video_vblank, video_blank_n, video_ce_pix;
-logic       TMS_interrupt_n;
+logic [7:0] video_r, video_g, video_b;
+logic       video_hs_n, video_vs_n, video_hblank, video_vblank, video_ce_pix;
 
 // Debugger Z80 (doc/z80-debugger.md). Ve FPGA jde pres UART jadra na UART
 // HPS (/dev/ttyS1, 230400 8N1, protokol doc/z80-debugger-protokol.md),
@@ -173,23 +179,21 @@ end else begin : g_nodbg
 end
 endgenerate
 
-SordM5 #(.DEBUG(DEBUG)) sordm5_i
+sordm5_core #(.DEBUG(DEBUG)) sordm5_i
 (
 	.clk_sys(clk_sys),
 	.reset(reset),
 	.ps2_key(ps2_key),
 	.ioctl(ioctl),
-	.TMS_border(status[9]),
-	.TMS_interrupt_n(TMS_interrupt_n),
-	.TMS_PAL(status[10]),
-	.video_R(video_R),
-    .video_G(video_G),
-    .video_B(video_B),
-    .video_HS_n(video_HS_n),
-    .video_VS_n(video_VS_n),
+	.vdp_border(status[9]),
+	.vdp_pal(status[10]),
+	.video_r(video_r),
+    .video_g(video_g),
+    .video_b(video_b),
+    .video_hs_n(video_hs_n),
+    .video_vs_n(video_vs_n),
     .video_hblank(video_hblank),
     .video_vblank(video_vblank),
-    .video_blank_n(video_blank_n),
 	.video_ce_pix(video_ce_pix),
 	.audio(audio),
 
@@ -205,12 +209,12 @@ wire [21:0] gamma_bus;
 
 logic      vga_de;
 wire  [1:0] ar    = status[2:1];
-wire  [2:0] scale = status[5:3];
-wire  [2:0] sl    = scale != 0 ? scale - 1'd1 : 3'd0;
+wire  [2:0] sdfx  = status[5:3];          // Scandoubler Fx (CONF_STR O[5:3])
+wire  [1:0] sl    = sdfx != 0 ? sdfx[1:0] - 2'd1 : 2'd0;    // 1..4 -> 0..3 (CRT 25..75 % = 1..3)
 
-assign VGA_SL = sl[1:0];
+assign VGA_SL = sl;
 assign CLK_VIDEO   = clk_sys;
-assign scandoubler = forced_scandoubler || scale != 0;
+assign scandoubler = forced_scandoubler || sdfx != 0;
 
 logic  en216p;
 always_ff @(posedge CLK_VIDEO) begin
@@ -221,27 +225,27 @@ video_freak video_freak_i
 (
 	.*,
 	.VGA_DE_IN(vga_de),
-    .VGA_VS(~video_VS_n),
+    .VGA_VS(~video_vs_n),
 	.ARX((ar == 0) ? 12'd4 : {10'b0, (ar - 1'd1)}),
 	.ARY((ar == 0) ? 12'd3 : 12'd0),
 	.CROP_SIZE(en216p ? 12'd216 : 12'd0),
-	.CROP_OFF(0),
+	.CROP_OFF('0),
 	.SCALE(status[8:6])
 );
 
 video_mixer #(.GAMMA(1), .LINE_LENGTH(290)) video_mixer_i
 (
    .CLK_VIDEO(CLK_VIDEO),
-   .hq2x(scale==1),
+   .hq2x(sdfx==1),
    .scandoubler(scandoubler),
    .gamma_bus(gamma_bus),
 
    .ce_pix(video_ce_pix),
-   .R(video_R),
-   .G(video_G),
-   .B(video_B),
-   .HSync(~video_HS_n),
-   .VSync(~video_VS_n),
+   .R(video_r),
+   .G(video_g),
+   .B(video_b),
+   .HSync(~video_hs_n),
+   .VSync(~video_vs_n),
    .HBlank(video_hblank),
    .VBlank(video_vblank),
 
@@ -259,3 +263,5 @@ video_mixer #(.GAMMA(1), .LINE_LENGTH(290)) video_mixer_i
 
 
 endmodule
+
+`default_nettype wire

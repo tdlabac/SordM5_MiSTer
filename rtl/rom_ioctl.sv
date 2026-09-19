@@ -13,8 +13,6 @@
 //  i pro verilátor (verilator/rtl/dpram.sv).
 //============================================================================
 
-`default_nettype none
-
 module rom_ioctl #(
    parameter addr_width    = 13,
    parameter mem_name      = "ROM",
@@ -29,6 +27,11 @@ module rom_ioctl #(
    input  wire                  cs,
    input  wire                  oe
 );
+
+// `default_nettype none` až za hlavičkou: vstupní port bez druhu (i s datovým
+// typem, např. struct) je podle LRM net výchozího typu a pod `none` by byl
+// chybou. Tělo modulu je chráněné (překlep v zapojení nevyrobí implicitní net).
+`default_nettype none
 
    // Adresa souboru nad rozsahem paměti se nezapisuje.
    wire in_range = (ioctl.addr >> addr_width) == 0;

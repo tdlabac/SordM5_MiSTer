@@ -1,7 +1,7 @@
 //============================================================================
 //  tv80_dbg — obálka TV80a s debuggerem (návrh: doc/z80-debugger.md)
 //
-//  Porty sběrnice jsou stejné jako u TV80a, v SordM5.sv ji nahrazuje 1:1.
+//  Porty sběrnice jsou stejné jako u TV80a, v rtl/sordm5_core.sv ji nahrazuje 1:1.
 //  DEBUG = 0: jen holé TV80a, debugger se vůbec nepřeloží, freeze = 0.
 //  Rozhraní debuggeru: tv80_dbg_pkg::dbg_in_t / dbg_out_t.
 //

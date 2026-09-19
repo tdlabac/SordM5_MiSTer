@@ -1,6 +1,6 @@
 // Test zmrazení celého počítače (doc/z80-debugger.md, kroky 4 a 5).
 //
-// Dvě instance celého SordM5 (DEBUG = 1), každá má vlastní hodiny:
+// Dvě instance celého jádra sordm5_core (DEBUG = 1), každá má vlastní hodiny:
 //   a  debugger ji zastavuje (příkaz stop i breakpointy), krokuje, nahrává
 //      registry (DIRSet s REG) a za zastavení čte paměť převzetím sběrnice,
 //   b  běží bez zásahů.
@@ -66,11 +66,11 @@ module tb_freeze
    end
 
 `define M5_INST(name, clk, din, dout, ts) \
-   SordM5 #(.DEBUG(1)) name ( \
+   sordm5_core #(.DEBUG(1)) name ( \
       .clk_sys(clk), .reset(reset), .ps2_key(11'd0), .ioctl(ioctl_idle), \
-      .TMS_border(1'b0), .TMS_PAL(1'b0), .TMS_interrupt_n(), \
-      .video_R(), .video_G(), .video_B(), .video_HS_n(), .video_VS_n(), \
-      .video_hblank(), .video_vblank(), .video_blank_n(), .video_ce_pix(), .audio(), \
+      .vdp_border(1'b0), .vdp_pal(1'b0), \
+      .video_r(), .video_g(), .video_b(), .video_hs_n(), .video_vs_n(), \
+      .video_hblank(), .video_vblank(), .video_ce_pix(), .audio(), \
       .dbg_i(din), .dbg_o(dout), .tstamp(ts));
 
    `M5_INST(a, clk_a, a_i, a_o, a_ts)
@@ -80,10 +80,12 @@ module tb_freeze
    assign a_busy    = a_o.mem_busy; assign a_rdata  = a_o.mem_rdata;
    assign a_reg     = a_o.regs;     assign b_reg    = b_o.regs;
 
-   assign a_rgb   = {a.video_R, a.video_G, a.video_B};
-   assign b_rgb   = {b.video_R, b.video_G, b.video_B};
-   assign a_sync  = {a.video_HS_n, a.video_VS_n, a.video_hblank, a.video_vblank, a.video_blank_n, a.video_ce_pix, a.TMS_interrupt_n};
-   assign b_sync  = {b.video_HS_n, b.video_VS_n, b.video_hblank, b.video_vblank, b.video_blank_n, b.video_ce_pix, b.TMS_interrupt_n};
+   assign a_rgb   = {a.video_r, a.video_g, a.video_b};
+   assign b_rgb   = {b.video_r, b.video_g, b.video_b};
+   // vdp_int_n je vnitřní signál jádra (přerušení VDP -> CTC); bit 2 je
+   // volný (dřív video_blank_n), aby se neposunuly pozice HS/VS pro C++
+   assign a_sync  = {a.video_hs_n, a.video_vs_n, a.video_hblank, a.video_vblank, 1'b1, a.video_ce_pix, a.vdp_int_n};
+   assign b_sync  = {b.video_hs_n, b.video_vs_n, b.video_hblank, b.video_vblank, 1'b1, b.video_ce_pix, b.vdp_int_n};
    assign a_audio = a.audio;   assign b_audio = b.audio;
    assign a_addr  = a.A;       assign b_addr  = b.A;
    assign a_do    = a.DO;      assign b_do    = b.DO;
@@ -91,8 +93,8 @@ module tb_freeze
    assign a_ctl   = {a.M1_n, a.MREQ_n, a.IORQ_n, a.RD_n, a.WR_n, a.RFSH_n};
    assign b_ctl   = {b.M1_n, b.MREQ_n, b.IORQ_n, b.RD_n, b.WR_n, b.RFSH_n};
 
-   assign a_ram   = a.ram.mem[peek_a[11:0]];
-   assign b_ram   = b.ram.mem[peek_a[11:0]];
-   assign a_vram  = a.vram.mem[peek_a];
-   assign b_vram  = b.vram.mem[peek_a];
+   assign a_ram   = a.ram_i.mem[peek_a[11:0]];
+   assign b_ram   = b.ram_i.mem[peek_a[11:0]];
+   assign a_vram  = a.vram_i.mem[peek_a];
+   assign b_vram  = b.vram_i.mem[peek_a];
 endmodule
