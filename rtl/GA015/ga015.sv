@@ -52,8 +52,8 @@ assign  SGC_n   = !(A[7:4] == 4'b0010) || IORQ_n;                // 20
 assign  KB_n    = !(A[7:4] == 4'b0011) || IORQ_n || RD_n;        // 30
 assign  STS_n   = !(A[7:4] == 4'b0101) || IORQ_n || RD_n;        // 50 čtení: páska, klávesa RESET
 assign  PCOM_n  = !(A[7:4] == 4'b0101) || IORQ_n || WR_n;        // 50 zápis: bit 1 motor kazety
+assign  EXIOA_n = !(A[7:4] == 4'b0110);                          // 60 IO 0x60
 
-assign  EXIOA_n = '1;
 assign  EXIOB_n = '1;
 assign  PDT_n   = '1;
 assign  PSTB_n  = '1;

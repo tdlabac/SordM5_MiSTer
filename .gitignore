@@ -42,3 +42,6 @@ tmp/
 obj_dir/
 obj_*/
 __pycache__/
+.vscode/
+*.stp
+.tmp/

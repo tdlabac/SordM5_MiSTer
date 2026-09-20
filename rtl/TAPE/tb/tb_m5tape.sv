@@ -45,6 +45,7 @@ module tb_m5tape (
    sordm5_core #(.DEBUG(0)) core_i (
       .clk_sys(clk), .reset(reset), .ps2_key(11'd0), .ioctl(ioctl),
       .vdp_border(1'b0), .vdp_pal(1'b0),
+      .cart_sel(sordm5_pkg::CART_NONE), .cart_opt(16'd0),
       .video_r(), .video_g(), .video_b(), .video_hs_n(), .video_vs_n(),
       .video_hblank(), .video_vblank(), .video_ce_pix(), .audio(),
       .ce_cpu(ce_cpu), .cas_in(cas_in), .cas_motor(cas_motor),

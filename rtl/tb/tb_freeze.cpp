@@ -10,7 +10,11 @@
 // přístupy debuggeru; na konci celá RAM a VRAM. Navíc:
 //   - při zastavení PC v REG = adresa na sběrnici,
 //   - DIRSet s REG nezmění REG,
-//   - čtení debuggerem vrátí obsah ROM (rom.hex) a RAM (z instance b).
+//   - čtení debuggerem vrátí obsah ROM (rom.hex), RAM (z instance b)
+//     i cartridge (cart.hex ve sdílené RAM).
+//
+// Cartridge se nahrává přes ioctl ještě za resetu, stejnou cestou jako
+// v jádře — bez toho by modul cartridge zůstal bez rom_size neaktivní.
 //
 // Prostředí: FZ_CLOCKS (takty instance a, výchozí 6 000 000),
 //            FZ_SEED (semínko, výchozí 1), FZ_NOSTOP=1 (bez zastavování).
@@ -19,6 +23,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <random>
+#include <vector>
 
 static Vtb_freeze* t;
 static long env(const char* n, long d) { const char* v = getenv(n); return v ? strtol(v, 0, 0) : d; }
@@ -46,6 +51,31 @@ static void load_rom() {
    if (f) fclose(f);
 }
 
+// Cartridge se do sdílené RAM nahrává přes ioctl (index 1), stejně jako
+// v jádře — jinak by modul cartridge zůstal bez rom_size neaktivní. Obě
+// instance se přitom taktují stejně, zmrazení začne až potom.
+static std::vector<uint8_t> cart_img;      // obraz cartridge pro kontrolu čtení
+
+static long download_cart() {
+   std::vector<uint8_t>& img = cart_img;
+   FILE* f = fopen("cart.hex", "r");
+   for (unsigned v; f && fscanf(f, "%x", &v) == 1; ) img.push_back((uint8_t)v);
+   if (f) fclose(f);
+   if (img.empty()) return 0;
+
+   t->io_download = 1;
+   tick(true);
+   for (size_t a = 0; a < img.size(); a++) {
+      t->io_addr = (uint32_t)a; t->io_data = img[a]; t->io_wr = 1;
+      tick(true);
+      t->io_wr = 0;
+      tick(true);
+   }
+   t->io_download = 0;
+   tick(true);
+   return (long)img.size();
+}
+
 int main(int argc, char** argv) {
    Verilated::commandArgs(argc, argv);
    t = new Vtb_freeze;
@@ -58,6 +88,7 @@ int main(int argc, char** argv) {
    t->clk_a = 0; t->clk_b = 0; t->eval();
    t->reset = 1;
    for (int i = 0; i < 20; i++) tick(true);
+   const long cart_len = download_cart();   // ještě v resetu, ať čas počítače začne od nuly
    t->reset = 0;
 
    long common = 0, frozen = 0, stops = 0, bp_stops = 0, steps = 0, dirsets = 0;
@@ -104,7 +135,9 @@ int main(int argc, char** argv) {
          if (reads_left > 0) {
             reads_left--;
             m_we = false;
-            m_addr = chance(2) ? (uint16_t)(0x7000 + rng() % 0x1000) : (uint16_t)rng();
+            m_addr = chance(2) ? (uint16_t)(0x7000 + rng() % 0x1000)
+                   : chance(2) ? (uint16_t)(0x2000 + rng() % 0x2000)   // cartridge
+                               : (uint16_t)rng();
             t->c_mem_req = 1; t->c_mem_we = 0; t->c_mem_addr = m_addr;
             mem_wait = 2; st = MEM_WAIT; reads++;
          } else if (!did_dirset && chance(4)) {
@@ -125,6 +158,8 @@ int main(int argc, char** argv) {
             uint8_t got = t->a_rdata;
             int want = -1;
             if (m_addr < 0x2000) want = rom[m_addr];
+            if (m_addr >= 0x2000 && m_addr < 0x2000 + (int)cart_img.size())
+               want = cart_img[m_addr - 0x2000];       // cartridge ze sdílené RAM
             if (m_addr >= 0x7000 && m_addr < 0x8000) {   // RAM; 8000h+ nic nečte (FF)
                t->peek_a = m_addr & 0x0FFF; t->eval(); want = t->b_ram;
             }
@@ -204,6 +239,10 @@ int main(int argc, char** argv) {
    printf("  %-52s %s (%ld)\n", "DIRSet s REG nezmění REG", dirset_bad ? "CHYBA" : "OK", dirset_bad);           fails += dirset_bad != 0;
    printf("  %-52s %s (%ld)\n", "čtení debuggerem = obsah ROM a RAM", read_bad ? "CHYBA" : "OK", read_bad);      fails += read_bad != 0;
    printf("  %-52s %s (%d)\n",  "RAM a VRAM na konci shodné", mem_bad ? "CHYBA" : "OK", mem_bad);                 fails += mem_bad != 0;
+   printf("Cartridge: nahráno %ld B přes ioctl, rom_size v jádře %04X\n",
+          cart_len, (unsigned)t->a_rom_size);
+   bool cart_ok = (long)t->a_rom_size == cart_len;
+   printf("  %-52s %s\n", "cartridge: rom_size = délka souboru", cart_ok ? "OK" : "CHYBA");   fails += !cart_ok;
    bool alive = intas > 2 && vram_used > 100;
    printf("  %-52s %s\n", "počítač běží (přerušení, zápisy do VRAM)", alive ? "OK" : "CHYBA");                   fails += !alive;
    bool enough = nostop || (stops > 20 && bp_stops > 20 && steps > 20 && dirsets > 10 && reads > 50 && writes > 10);

@@ -34,7 +34,8 @@
 //              vrací 8'hFF a nadřazený modul periferie slučuje přes AND.
 //              Výstup je povolený při čtení z CTC a po celou dobu potvrzení
 //              přerušení, na které CTC odpovídá.
-//   zc_to[3]   skutečný Z8430 vývod ZC/TO3 nemá, tady je pro úplnost funkční
+//   zc_to      jen kanály 0-2; Z8430 vývod ZC/TO3 nemá (kanál 3 ho na pouzdro
+//              vyvedený nikdy neměl), takže se nenabízí
 
 `default_nettype none
 
@@ -59,7 +60,7 @@ module ctc
    output logic       ieo,        // daisy chain out
 
    input  logic [3:0] clk_trg,
-   output logic [3:0] zc_to
+   output logic [2:0] zc_to      // ZC/TO0-2, kanál 3 vývod nemá
 );
 
    logic [3:0] cSel;
@@ -69,6 +70,13 @@ module ctc
 
    logic [3:0] ch_int;            // ve VHDL `int`, což je v SV klíčové slovo
    logic [3:0] ch_int_clr;
+
+   // Kanál 3 počítá stejně jako ostatní, jen jeho ZC/TO nikam nevede —
+   // skutečný Z8430 ten vývod nemá.
+   /* verilator lint_off UNUSEDSIGNAL */
+   logic [3:0] ch_zc_to;
+   /* verilator lint_on UNUSEDSIGNAL */
+   assign zc_to = ch_zc_to[2:0];
 
    // Rozsah 7:3 drží mapování bitů vektoru.
    logic [7:3] irqVect       = '0;
@@ -239,7 +247,7 @@ module ctc
             .int_clr   (ch_int_clr[i]),
             .setTC     (cSetTC[i]),
             .clk_trg   (clk_trg[i]),
-            .zc_to     (zc_to[i])
+            .zc_to     (ch_zc_to[i])
          );
 
          assign cSel[i] = (!en_n && io_cycle && (cs == CH[1:0]));

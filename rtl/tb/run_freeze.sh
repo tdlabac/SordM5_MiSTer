@@ -30,7 +30,7 @@ verilator -cc --exe --build -O3 -Wno-fatal -Wno-lint -Wno-MULTIDRIVEN -Wno-PINMI
    $R/CTC/ctc_channel.sv "${CTC:-$R/CTC/ctc.sv}" \
    $R/SOUND/jt89/hdl/jt89.v $R/SOUND/jt89/hdl/jt89_tone.v $R/SOUND/jt89/hdl/jt89_noise.v \
    $R/SOUND/jt89/hdl/jt89_vol.v $R/SOUND/jt89/hdl/jt89_mixer.v \
-   $R/sordm5_core.sv $R/rom_ioctl.sv "$CLOCK" $R/GA015/ga015.sv $R/KEYBOARD/keyboard.sv $R/EXT/ext_bus.sv $R/tstamp.sv \
+   $R/sordm5_core.sv $R/rom_ioctl.sv "$CLOCK" $R/GA015/ga015.sv $R/KEYBOARD/keyboard.sv $R/EXT/ext_bus.sv $R/EXT/carts/cart_none.sv $R/EXT/carts/cart_em32.sv $R/EXT/carts/cart_em64.sv $R/EXT/carts/cart_brno.sv $R/tstamp.sv \
    tb_mem.sv tb_freeze.sv tb_freeze.cpp >"$OBJ/build.log" 2>&1 || { grep -E "Error|error" "$OBJ/build.log" | head -20; exit 1; }
 
 cd "$OBJ"

@@ -2,7 +2,7 @@
 // Chování jako verilator/rtl/spram.sv a dpram.sv: q registrované, cs && oe
 // jinak 0xFF, zápis při wren && cs. Obsah podle mem_name z hex souborů
 // (jeden bajt na řádek), které připraví run skript: ROM -> rom.hex,
-// ROM_CART -> cart.hex. Ostatní paměti začínají nulou.
+// ROM_CART | CART_RAM -> cart.hex. Ostatní paměti začínají nulou.
 
 module spram #(
    parameter addr_width    = 8,
@@ -51,7 +51,7 @@ module dpram #(
    initial begin
       for (int i = 0; i < (1<<addr_width); i++) mem[i] = '0;
       if (mem_name == "ROM")      $readmemh("rom.hex", mem);
-      if (mem_name == "ROM_CART") $readmemh("cart.hex", mem);
+      if (mem_name == "ROM_CART" || mem_name == "CART_RAM") $readmemh("cart.hex", mem);
    end
 
    always_ff @(posedge clock) begin

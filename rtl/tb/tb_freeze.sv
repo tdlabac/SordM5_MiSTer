@@ -16,6 +16,13 @@ module tb_freeze
    input  logic         clk_b,
    input  logic         reset,
 
+   // nahrání cartridge přes ioctl (index 1) — stejnou cestou jako v jádře,
+   // jinak by modul cartridge zůstal bez rom_size neaktivní
+   input  logic         io_download,
+   input  logic         io_wr,
+   input  logic [26:0]  io_addr,
+   input  logic [7:0]   io_data,
+
    // příkazy debuggeru instance a
    input  logic         c_stop, c_run, c_step, c_dirset,
    input  logic [211:0] c_dir,
@@ -46,10 +53,11 @@ module tb_freeze
 
    // porovnání pamětí na konci
    input  logic [13:0]  peek_a,
-   output logic [7:0]   a_ram, b_ram, a_vram, b_vram
+   output logic [7:0]   a_ram, b_ram, a_vram, b_vram,
+   output logic [16:0]  a_rom_size
 );
-   sordm5_pkg::ioctl_t ioctl_idle;
-   assign ioctl_idle = '0;
+   sordm5_pkg::ioctl_t ioctl_bus;
+   assign ioctl_bus = {io_download, 16'd1, io_wr, io_addr, io_data};
 
    bp_t bps [NBP];
    always_ff @(posedge clk_a)
@@ -67,8 +75,9 @@ module tb_freeze
 
 `define M5_INST(name, clk, din, dout, ts) \
    sordm5_core #(.DEBUG(1)) name ( \
-      .clk_sys(clk), .reset(reset), .ps2_key(11'd0), .ioctl(ioctl_idle), \
+      .clk_sys(clk), .reset(reset), .ps2_key(11'd0), .ioctl(ioctl_bus), \
       .vdp_border(1'b0), .vdp_pal(1'b0), \
+      .cart_sel(sordm5_pkg::CART_NONE), .cart_opt(16'd0), \
       .video_r(), .video_g(), .video_b(), .video_hs_n(), .video_vs_n(), \
       .video_hblank(), .video_vblank(), .video_ce_pix(), .audio(), \
       .ce_cpu(), .cas_in(1'b0), .cas_motor(), \
@@ -96,6 +105,7 @@ module tb_freeze
 
    assign a_ram   = a.ram_i.mem[peek_a[11:0]];
    assign b_ram   = b.ram_i.mem[peek_a[11:0]];
+   assign a_rom_size = a.ext_i.rom_size;
    assign a_vram  = a.vram_i.mem[peek_a];
    assign b_vram  = b.vram_i.mem[peek_a];
 endmodule

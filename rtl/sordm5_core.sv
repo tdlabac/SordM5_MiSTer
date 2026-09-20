@@ -1,7 +1,6 @@
 //============================================================================
 //  Computer: Sord M5
 //
-//  Copyright (C) 2018 Sorgelig
 //  Copyright (C) 2021 molekula
 //
 //  This program is free software; you can redistribute it and/or modify it
@@ -40,6 +39,10 @@ module sordm5_core #(
    input  sordm5_pkg::ioctl_t  ioctl,     // plnění ROM souborem z menu
    input  wire                 vdp_border,
    input  wire                 vdp_pal,
+
+   // cartridge na rozšiřující sběrnici (rtl/EXT/ext_bus.sv)
+   input  sordm5_pkg::cart_sel_t cart_sel,   // typ vybraný z menu
+   input  wire  [15:0]         cart_opt,     // volby z jeho podmenu
    output logic [7:0]          video_r,
    output logic [7:0]          video_g,
    output logic [7:0]          video_b,
@@ -95,6 +98,7 @@ logic [7:0]  DO, DI;
 logic        MREQ_n, RD_n, WR_n, IORQ_n, M1_n, RFSH_n;
 logic        MRD_n, MWR_n, IORD_n, IOWR_n;
 logic        ROM0_n, ROM1_n, ROM2_n, EXM_n, EXIOA_n, EXIOB_n;
+logic        ROM0_ovrd_n;  // externí obvody blokují ROM0_n, viz rtl/EXT/ext_bus.sv
 
 // vnitřní výběry obvodů (GA015)
 logic cs_ctc_n, cs_sgc_n, cs_ram0_n, cs_ram1_n, cs_kb_n, cs_vdp_rd_n, cs_vdp_wr_n;
@@ -106,7 +110,7 @@ assign DI = data_ctc & data_rom & data_ram & data_kb & data_vdp & data_ext & dat
 
 // ostatní spoje mezi bloky
 logic        ctc_int_n;                  // CTC -> INT Z80
-logic [3:0]  ctc_zc_to;                  // CTC ZC/TO, ZC/TO2 jde na sběrnici jako EXCLK
+logic [2:0]  ctc_zc_to;                  // CTC ZC/TO0-2, ZC/TO2 jde na sběrnici jako EXCLK
 logic        vdp_int_n;                  // přerušení z VDP (aktivní v 0) -> CTC CK3
 logic        sgc_ready;                  // SN76489 READY -> WAIT Z80
 logic        ext_wait_n, ext_romds_n, ext_int_n;
@@ -217,7 +221,7 @@ jt89 sgc_i
 
 // Rozšiřující sběrnice — cartridge a periferie volitelné z menu.
 // EXINT_n -> CTC CLK/TRG0, EXCLK <- CTC ZC/TO2 (pin 9). ROMDS_n zatím nepoužito.
-logic signed [15:0] audio_ext;
+// Zvuk se ze sběrnice nevede: konektor M5 audio nemá.
 ext_bus ext_i
 (
    .clk_sys(clk_sys),
@@ -233,7 +237,7 @@ ext_bus ext_i
    .MWR_n(MWR_n),
    .IORD_n(IORD_n),
    .IOWR_n(IOWR_n),
-   .ROM0_n(ROM0_n),
+   .ROM0_n(ROM0_n | ROM0_ovrd_n),  // externí obvody blokují ROM0_n, viz rtl/EXT/ext_bus.sv
    .ROM1_n(ROM1_n),
    .ROM2_n(ROM2_n),
    .EXM_n(EXM_n),
@@ -244,14 +248,13 @@ ext_bus ext_i
    .ROMDS_n(ext_romds_n),
    .EXINT_n(ext_int_n),
    .EXCLK(ctc_zc_to[2]),
-   .audio(audio_ext)
+   .ROM0_ovrd_n(ROM0_ovrd_n),
+   .cart_sel(cart_sel),
+   .cart_opt(cart_opt)
 );
 
-// Směšování zvuku: jt89 (11 b) roztažený na 16 b + sběrnice, se saturací.
-logic signed [16:0] audio_sum;
-assign audio_sum = $signed({audio_sgc[10], audio_sgc, 5'b0}) + $signed({audio_ext[15], audio_ext});
-assign audio = (audio_sum >  17'sd32767) ? 16'sh7FFF :
-               (audio_sum < -17'sd32768) ? 16'sh8000 : audio_sum[15:0];
+// Zvuk počítače: jen jt89 (11 bitů) roztažený na 16.
+assign audio = {audio_sgc, 5'b00000};
 
 // VDP a jeho VRAM. vram_do/vram_di jsou pojmenované z pohledu VDP:
 // vram_do = data z VDP do VRAM, vram_di = data z VRAM do VDP.
@@ -343,7 +346,7 @@ rom_ioctl #(.addr_width(13),.mem_name("ROM"),.IOCTL_INDEX(0)) rom_i
    .ioctl(ioctl),
    .address(A[12:0]),
    .q(data_rom),
-   .cs(!ROM0_n),
+   .cs(!(ROM0_n | ROM0_ovrd_n)),
    .oe(!MRD_n)
 );
 

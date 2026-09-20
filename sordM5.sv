@@ -70,6 +70,17 @@ localparam CONF_STR = {
 	"O[11],Tape Sound,Off,On;",
 	"O[12],Fast Tape,Off,On;",
 	"O[13],Tape Input,File,ADC;",
+	"-;",
+	// Cartridge: vybrany typ dostane enable v rtl/EXT/ext_bus.sv. Jeho podmenu
+	// se skryva pres menumask (prefix h<bit>, nize). Zmena typu resetuje
+	// pocitac, jako by se modul vytahl a zasunul.
+	"O[15:14],Cartridge,None,EM32,EM64,BRNO;",
+	"h0O[16],WP monitor,Off,On;",
+	"h0O[17],Autostart,Off,On;",
+	"h0O[18],Mode,EM64,EM32;",
+	"h0O[19],Monitor protect,Off,On;",
+	"h1S0,DSK,Floppy A;",
+	"h1S1,DSK,Floppy B;",
 	"O[2:1],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
     "O[5:3],Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
     "O[8:6],Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer,HV-Integer;",
@@ -97,7 +108,18 @@ wire  [7:0] ioctl_dout;
 sordm5_pkg::ioctl_t ioctl;
 assign ioctl = {ioctl_download, ioctl_index, ioctl_wr, ioctl_addr, ioctl_dout};
 
-hps_io #(.CONF_STR(CONF_STR)) hps_io_i
+// Cartridge: typ z menu a volby jeho podmenu. Podmenu se v menu skryje, dokud
+// neni jeho typ vybrany: menumask bit 0 = EM64, bit 1 = BRNO (prefix h0/h1
+// v CONF_STR; h skryva, d jen zesedi). Blokova zarizeni BRNO (S0/S1) zatim
+// nikam nevedou, porty sd_* v hps_io jsou nezapojene — doplni se s modulem.
+sordm5_pkg::cart_sel_t cart_sel;
+assign cart_sel = sordm5_pkg::cart_sel_t'(status[15:14]);
+wire [15:0] cart_opt = status[31:16];
+wire [15:0] menumask = {14'd0,
+                        cart_sel == sordm5_pkg::CART_BRNO,
+                        cart_sel == sordm5_pkg::CART_EM64};
+
+hps_io #(.CONF_STR(CONF_STR), .VDNUM(2)) hps_io_i
 (
 	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
@@ -106,6 +128,7 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io_i
 	.forced_scandoubler(forced_scandoubler),
 	.buttons(buttons),
 	.status(status),
+	.status_menumask(menumask),
 	.ps2_key(ps2_key),
 
 	.ioctl_download(ioctl_download),
@@ -139,9 +162,21 @@ pll pll_i
 // puls a CPU se resetoval pri nahrani kazety, aniz by synchronni logika
 // (tstamp, periferie) reset videla. Nalezeno debuggerem: PC=0, SP=0, R=0
 // a cas pocitace bezel dal.
+//
+// Zmena cartridge z menu resetuje pocitac (vymena modulu za behu je pro nej
+// totez jako zapnuti). Reset se drzi par taktu, aby ho chytily vsechny bloky.
+logic [1:0] cart_sel_d;
+logic [7:0] cart_reset = '0;
+always_ff @(posedge clk_sys) begin
+	cart_sel_d <= cart_sel;
+	if (cart_sel_d != cart_sel) cart_reset <= '1;
+	else if (cart_reset != 0)   cart_reset <= cart_reset - 8'd1;
+end
+
 logic reset = 1'b1;
 always_ff @(posedge clk_sys)
-	reset <= RESET | status[0] | buttons[1] | (ioctl_download & !tape_loading);
+	reset <= RESET | status[0] | buttons[1] | (cart_reset != 0) |
+	         (ioctl_download & !tape_loading);
 logic [7:0] video_r, video_g, video_b;
 logic       video_hs_n, video_vs_n, video_hblank, video_vblank, video_ce_pix;
 
@@ -205,6 +240,8 @@ sordm5_core #(.DEBUG(DEBUG)) sordm5_i
 	.ioctl(ioctl),
 	.vdp_border(status[9]),
 	.vdp_pal(status[10]),
+	.cart_sel(cart_sel),
+	.cart_opt(cart_opt),
 	.video_r(video_r),
     .video_g(video_g),
     .video_b(video_b),
