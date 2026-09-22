@@ -118,7 +118,8 @@ wire [15:0] cart_opt = status[31:16];
 wire [15:0] menumask = {14'd0,
                         cart_sel == sordm5_pkg::CART_BRNO,
                         cart_sel == sordm5_pkg::CART_EM64};
-
+wire      [31:0] joy0, joy1;
+wire       [5:0] joy[2];
 hps_io #(.CONF_STR(CONF_STR), .VDNUM(2)) hps_io_i
 (
 	.clk_sys(clk_sys),
@@ -130,6 +131,8 @@ hps_io #(.CONF_STR(CONF_STR), .VDNUM(2)) hps_io_i
 	.status(status),
 	.status_menumask(menumask),
 	.ps2_key(ps2_key),
+	.joystick_0(joy0),
+    .joystick_1(joy1),
 
 	.ioctl_download(ioctl_download),
 	.ioctl_index(ioctl_index),
@@ -138,6 +141,9 @@ hps_io #(.CONF_STR(CONF_STR), .VDNUM(2)) hps_io_i
 	.ioctl_dout(ioctl_dout),
 	.ioctl_wait(1'b0)
 );
+
+assign joy[0] = joy0[5:0];
+assign joy[1] = joy1[5:0];
 
 // Kazeta (blok KAZETA nize). Nahrani kazety pocitac neresetuje (kazeta se
 // vklada do beziciho pocitace).
@@ -237,6 +243,7 @@ sordm5_core #(.DEBUG(DEBUG)) sordm5_i
 	.clk_sys(clk_sys),
 	.reset(reset),
 	.ps2_key(ps2_key),
+	.joy(joy),
 	.ioctl(ioctl),
 	.vdp_border(status[9]),
 	.vdp_pal(status[10]),

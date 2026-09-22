@@ -36,6 +36,7 @@ module sordm5_core #(
    input  wire                 clk_sys,
    input  wire                 reset,
    input  wire  [10:0]         ps2_key,
+   input  wire  [5:0]          joy[2],
    input  sordm5_pkg::ioctl_t  ioctl,     // plnění ROM souborem z menu
    input  wire                 vdp_border,
    input  wire                 vdp_pal,
@@ -295,6 +296,7 @@ keyboard keyboard_i
 (
    .clk_i(clk_sys),
    .ps2_code_i(ps2_key),
+   .joy(joy),
    .addr_i(A[2:0]),
    .kb_ce_i(!cs_kb_n),
    .kb_data_o(data_kb),

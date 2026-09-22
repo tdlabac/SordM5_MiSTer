@@ -34,6 +34,7 @@ module keyboard
 (
    input  wire        clk_i,
    input  wire [10:0] ps2_code_i,
+   input  wire [5:0]  joy[2],
    input  wire [2:0]  addr_i,
    input  wire        kb_ce_i,
    output wire [7:0]  kb_data_o,
@@ -52,7 +53,29 @@ module keyboard
    logic [10:0]     old_code = '0;
 
    assign kb_rst_o  = resetKey;
-   assign kb_data_o = kb_ce_i ? keyMatrix[addr_i] : 8'hFF;
+
+   // Joystick se do matice přimíchává až tady, na výstupu.
+   //
+   // Do keyMatrix patřit nemůže: ta se přepisuje jen při události z PS/2
+   // (`changed`), takže by se pohyb páky projevil až po stisku nějaké klávesy
+   // a pak by v matici zůstal viset až do další události. Původní VHDL
+   // (keyboard.vhd, commit "Joypad support") proto tyhle řádky mělo mimo
+   // `if changed`, a stav kláves 1, 2, 5, 6 si drželo zvlášť, aby je spoušť
+   // joysticku nepřepsala.
+   logic [7:0][7:0] joyMatrix;
+   always_comb begin
+      joyMatrix = '0;
+      // spouště: klávesy 1, 2 (levý joystick) a 5, 6 (pravý)
+      joyMatrix[1][0] = joy[0][4];
+      joyMatrix[1][1] = joy[0][5];
+      joyMatrix[1][4] = joy[1][4];
+      joyMatrix[1][5] = joy[1][5];
+      // směry, port 37 (viz schéma dole)
+      joyMatrix[7] = {joy[1][2], joy[1][1], joy[1][3], joy[1][0],
+                      joy[0][2], joy[0][1], joy[0][3], joy[0][0]};
+   end
+
+   assign kb_data_o = kb_ce_i ? (keyMatrix[addr_i] | joyMatrix[addr_i]) : 8'hFF;
 
    always_ff @(posedge clk_i) begin : change
       if (old_code != ps2_code_i) begin
@@ -77,12 +100,12 @@ module keyboard
             8'h29: keyMatrix[0][6] <= pressed;   // SPACE
             8'h5a: keyMatrix[0][7] <= pressed;   // ENTER
             // port 31
-            8'h16: keyMatrix[1][0] <= pressed;   // 1
-            8'h1e: keyMatrix[1][1] <= pressed;   // 2
+            8'h16: keyMatrix[1][0] <= pressed;   // 1 (+ spoušť JOY0, viz joyMatrix)
+            8'h1e: keyMatrix[1][1] <= pressed;   // 2 (+ útok JOY0)
             8'h26: keyMatrix[1][2] <= pressed;   // 3
             8'h25: keyMatrix[1][3] <= pressed;   // 4
-            8'h2e: keyMatrix[1][4] <= pressed;   // 5
-            8'h36: keyMatrix[1][5] <= pressed;   // 6
+            8'h2e: keyMatrix[1][4] <= pressed;   // 5 (+ spoušť JOY1)
+            8'h36: keyMatrix[1][5] <= pressed;   // 6 (+ útok JOY1)
             8'h3d: keyMatrix[1][6] <= pressed;   // 7
             8'h3e: keyMatrix[1][7] <= pressed;   // 8
             // port 32
@@ -130,15 +153,6 @@ module keyboard
             8'h4c: keyMatrix[6][5] <= pressed;   // ;
             8'h52: keyMatrix[6][6] <= pressed;   // :
             8'h5b: keyMatrix[6][7] <= pressed;   // ]
-            // port 37 — ve VHDL bez popisu; tady klávesy PC, ze kterých se čte
-            8'h0c: keyMatrix[7][0] <= pressed;   // PC F4
-            8'h06: keyMatrix[7][1] <= pressed;   // PC F2
-            8'h05: keyMatrix[7][2] <= pressed;   // PC F1
-            8'h04: keyMatrix[7][3] <= pressed;   // PC F3
-            8'h74: keyMatrix[7][4] <= pressed;   // PC šipka vpravo
-            8'h75: keyMatrix[7][5] <= pressed;   // PC šipka nahoru
-            8'h6b: keyMatrix[7][6] <= pressed;   // PC šipka vlevo
-            8'h72: keyMatrix[7][7] <= pressed;   // PC šipka dolů
 
             // multy
             8'h66: begin                         // BACKSPACE
@@ -152,6 +166,16 @@ module keyboard
       end
    end
 
+// joystick_x[0] - right
+// joystick_x[1] - left
+// joystick_x[2] - down
+// // joystick_x[3] - up
+//  P.JOY | P.JOY | P.JOY | P.JOY | L.JOY | L.JOY | L.JOY | L.JOY | 37
+// |   |   |  <--  |   ^   |  -->  |   |   |  <--  |   ^   |  -->  |
+// |   v   |       |   |   |       |   v   |       |   |   |       |
+// `-------+-------+-------+-------+-------+-------+-------+-------'
+
+// Spoustece joy ( fire, attack ) jsou napojeny na klavesy 1, 2, 5 a 6.
 endmodule
 
 `default_nettype wire
